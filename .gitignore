@@ -2,3 +2,4 @@
 .claude/scheduled_tasks.lock
 __pycache__/
 *.pyc
+CLAUDE.local.md
