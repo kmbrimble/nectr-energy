@@ -1,10 +1,12 @@
 import re
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
 from homeassistant.const import UnitOfEnergy, CURRENCY_DOLLAR
-from .const import DOMAIN
+from .const import DOMAIN, CONF_VISIBLE_SENSORS, CONF_DISABLED_SENSORS, DEFAULT_VISIBLE_SENSORS
 
 async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = hass.data[DOMAIN][entry.entry_id]
+    visible_keys = entry.data.get(CONF_VISIBLE_SENSORS, DEFAULT_VISIBLE_SENSORS)
+    disabled_keys = entry.data.get(CONF_DISABLED_SENSORS, [])
     entities = []
     
     for account_number in coordinator.data:
@@ -31,12 +33,19 @@ async def async_setup_entry(hass, entry, async_add_entities):
             NectrTariffSensor(coordinator, account_number, "Tariff Supply Charge", "Supply charge - General Usage", "tariff_supply"),
         ])
 
+    for entity in entities:
+        if entity.unique_key in disabled_keys:
+            entity._attr_entity_registry_enabled_default = False
+        else:
+            entity._attr_entity_registry_visible_default = entity.unique_key in visible_keys
+
     async_add_entities(entities)
 
 class NectrBaseSensor(SensorEntity):
     def __init__(self, coordinator, account_number, name, unique_key):
         self.coordinator = coordinator
         self.account_number = account_number
+        self.unique_key = unique_key
         self._attr_name = f"Nectr {account_number} {name}"
         self._attr_unique_id = f"nectr_{account_number}_{unique_key}"
         self.entity_id = f"sensor.nectr_{account_number.lower().replace('-', '_')}_{unique_key}"
@@ -69,7 +78,6 @@ class NectrGenericSensor(NectrBaseSensor):
         super().__init__(coordinator, account_number, name, unique_key)
         self.category = category
         self.data_key = data_key
-        self._attr_entity_registry_visible_default = False
         if device_class:
             self._attr_device_class = device_class
         if uom:
@@ -92,7 +100,6 @@ class NectrTariffSensor(NectrBaseSensor):
     def __init__(self, coordinator, account_number, name, tariff_key, unique_key):
         super().__init__(coordinator, account_number, name, unique_key)
         self.tariff_key = tariff_key
-        self._attr_entity_registry_visible_default = False
         self._attr_device_class = SensorDeviceClass.MONETARY
 
     @property
