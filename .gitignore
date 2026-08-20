@@ -1,4 +1,5 @@
 .env
+nectr_graphql_logs.jsonl
 .claude/scheduled_tasks.lock
 __pycache__/
 *.pyc

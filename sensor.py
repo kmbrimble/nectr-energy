@@ -1,4 +1,5 @@
 import re
+from datetime import date
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
 from homeassistant.const import UnitOfEnergy, CURRENCY_DOLLAR
 from .const import DOMAIN, CONF_VISIBLE_SENSORS, CONF_DISABLED_SENSORS, DEFAULT_VISIBLE_SENSORS
@@ -88,11 +89,18 @@ class NectrGenericSensor(NectrBaseSensor):
         if not data:
             return None
         val = data.get(self.data_key)
-        if self._attr_device_class == SensorDeviceClass.MONETARY and val is not None:
+        if val is None:
+            return None
+        if self._attr_device_class == SensorDeviceClass.MONETARY:
             try:
                 return float(val)
             except ValueError:
                 return val
+        if self._attr_device_class == SensorDeviceClass.DATE:
+            try:
+                return date.fromisoformat(val)
+            except ValueError:
+                return None
         return val
 
 class NectrTariffSensor(NectrBaseSensor):
