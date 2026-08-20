@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.0
+
+- Config flow: added a sensor visibility step (visible/disabled multi-select lists) after
+  authentication, replacing hardcoded per-sensor visibility
+- Fixed historical statistics backfill using the wrong statistics `source` for its entity-id
+  `statistic_id`, which broke coordinator setup
+- Fixed historical usage backfill resetting the cumulative sum on every import instead of
+  continuing from the last stored total
+- Fixed the API client silently swallowing GraphQL errors returned after authentication
+- Rewrote README for HACS custom component conventions
+
 ## 0.1.0 - Initial commit
 
 - Home Assistant custom integration for Nectr Energy
