@@ -3,8 +3,9 @@ from datetime import timedelta, datetime
 from zoneinfo import ZoneInfo
 import aiohttp
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
-from homeassistant.components.recorder.statistics import async_import_statistics
+from homeassistant.components.recorder.statistics import async_import_statistics, get_last_statistics
 from homeassistant.const import UnitOfEnergy
 from homeassistant.util import dt as dt_util
 from .api import NectrApiClient
@@ -68,14 +69,18 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
                 has_mean=False,
                 has_sum=True,
                 name=f"Nectr {account_number} {metric_key.replace('_', ' ').title()}",
-                source=DOMAIN,
+                source="recorder",
                 statistic_id=statistic_id,
                 unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR
             )
 
+            last_stats = await get_instance(self.hass).async_add_executor_job(
+                get_last_statistics, self.hass, 1, statistic_id, True, {"sum"}
+            )
+            running_sum = last_stats[statistic_id][0]["sum"] if statistic_id in last_stats else 0.0
+
             statistics = []
-            running_sum = 0.0
-            
+
             sorted_usage = sorted(all_usage, key=lambda x: int(x["period"].split(":")[0]))
 
             for item in sorted_usage:
