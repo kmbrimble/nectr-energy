@@ -48,7 +48,6 @@ class NectrBaseSensor(SensorEntity):
         self.unique_key = unique_key
         self._attr_name = f"Nectr {account_number} {name}"
         self._attr_unique_id = f"nectr_{account_number}_{unique_key}"
-        self.entity_id = f"sensor.nectr_{account_number.lower().replace('-', '_')}_{unique_key}"
 
     @property
     def device_info(self):

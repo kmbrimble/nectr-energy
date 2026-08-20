@@ -36,6 +36,8 @@ class NectrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     if not accounts:
                         errors["base"] = "no_active_accounts"
                     else:
+                        await self.async_set_unique_id(user_input[CONF_EMAIL].lower())
+                        self._abort_if_unique_id_configured()
                         self._account_data = user_input
                         return await self.async_step_sensors()
             except Exception:

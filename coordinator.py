@@ -2,7 +2,8 @@ import logging
 from datetime import timedelta, datetime
 from zoneinfo import ZoneInfo
 import aiohttp
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
 from homeassistant.components.recorder.statistics import async_import_statistics, get_last_statistics
@@ -13,6 +14,17 @@ from .const import DOMAIN, CONF_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
+STATE_TIMEZONES = {
+    "NSW": "Australia/Sydney",
+    "ACT": "Australia/Sydney",
+    "VIC": "Australia/Melbourne",
+    "QLD": "Australia/Brisbane",
+    "SA": "Australia/Adelaide",
+    "WA": "Australia/Perth",
+    "TAS": "Australia/Hobart",
+    "NT": "Australia/Darwin",
+}
+
 class NectrDataUpdateCoordinator(DataUpdateCoordinator):
     def __init__(self, hass, entry):
         self.entry = entry
@@ -21,39 +33,45 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=timedelta(hours=interval_hours))
 
     async def _async_update_data(self):
-        async with aiohttp.ClientSession() as session:
-            await self.api.authenticate(session)
-            accounts = await self.api.get_accounts(session)
-            
-            data = {}
-            for account in accounts:
-                acc_num = account["number"]
-                
-                usage = await self.api.get_usage(session, acc_num)
-                account_info = await self.api.get_account_info(session, acc_num)
-                power_perks = await self.api.get_power_perks(session, acc_num)
-                bill_info = await self.api.get_bill_payment_info(session, acc_num)
-                product_info = await self.api.get_product_info(session, acc_num)
-                
-                data[acc_num] = {
-                    "usage": usage,
-                    "account_info": account_info,
-                    "power_perks": power_perks,
-                    "bill_info": bill_info,
-                    "product_info": product_info
-                }
-                
-                await self._inject_historical_data(acc_num, usage)
-            return data
+        try:
+            async with aiohttp.ClientSession() as session:
+                await self.api.authenticate(session)
+                accounts = await self.api.get_accounts(session)
 
-    async def _inject_historical_data(self, account_number, usage_data):
+                data = {}
+                for account in accounts:
+                    acc_num = account["number"]
+
+                    usage = await self.api.get_usage(session, acc_num)
+                    account_info = await self.api.get_account_info(session, acc_num)
+                    power_perks = await self.api.get_power_perks(session, acc_num)
+                    bill_info = await self.api.get_bill_payment_info(session, acc_num)
+                    product_info = await self.api.get_product_info(session, acc_num)
+
+                    data[acc_num] = {
+                        "usage": usage,
+                        "account_info": account_info,
+                        "power_perks": power_perks,
+                        "bill_info": bill_info,
+                        "product_info": product_info
+                    }
+
+                    await self._inject_historical_data(acc_num, account.get("state"), usage)
+                return data
+        except (aiohttp.ClientError, ValueError) as err:
+            raise UpdateFailed(f"Error communicating with Nectr API: {err}") from err
+
+    async def _inject_historical_data(self, account_number, account_state, usage_data):
         if not usage_data:
             return
         all_usage = usage_data.get("allUsage", [])
         if not all_usage:
             return
 
-        tz = ZoneInfo("Australia/Brisbane")
+        # ponytail: assumes the API's usage response always covers exactly
+        # "yesterday" relative to poll time; a missed poll only backfills the
+        # most recent day, not any gap. Add gap catch-up if that's needed.
+        tz = ZoneInfo(STATE_TIMEZONES.get(account_state, "Australia/Brisbane"))
         now = dt_util.now(tz)
         yesterday = (now - timedelta(days=1)).date()
 
@@ -63,8 +81,14 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
             "controlled_load": "controlLoadUsage"
         }
 
+        registry = er.async_get(self.hass)
+
         for metric_key, usage_key in metrics.items():
-            statistic_id = f"sensor.nectr_{account_number.lower().replace('-', '_')}_{metric_key}"
+            unique_id = f"nectr_{account_number}_{metric_key}"
+            statistic_id = registry.async_get_entity_id("sensor", DOMAIN, unique_id)
+            if statistic_id is None:
+                continue
+
             metadata = StatisticMetaData(
                 has_mean=False,
                 has_sum=True,
