@@ -15,14 +15,14 @@ from .const import DOMAIN, CONF_INTERVAL
 _LOGGER = logging.getLogger(__name__)
 
 STATE_TIMEZONES = {
-    "NSW": "Australia/Sydney",
-    "ACT": "Australia/Sydney",
-    "VIC": "Australia/Melbourne",
-    "QLD": "Australia/Brisbane",
-    "SA": "Australia/Adelaide",
-    "WA": "Australia/Perth",
-    "TAS": "Australia/Hobart",
-    "NT": "Australia/Darwin",
+    "NEW SOUTH WALES": "Australia/Sydney",
+    "AUSTRALIAN CAPITAL TERRITORY": "Australia/Sydney",
+    "VICTORIA": "Australia/Melbourne",
+    "QUEENSLAND": "Australia/Brisbane",
+    "SOUTH AUSTRALIA": "Australia/Adelaide",
+    "WESTERN AUSTRALIA": "Australia/Perth",
+    "TASMANIA": "Australia/Hobart",
+    "NORTHERN TERRITORY": "Australia/Darwin",
 }
 
 class NectrDataUpdateCoordinator(DataUpdateCoordinator):
@@ -68,7 +68,7 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
         if not all_usage:
             return
 
-        tz = ZoneInfo(STATE_TIMEZONES.get(account_state, "Australia/Brisbane"))
+        tz = ZoneInfo(STATE_TIMEZONES.get((account_state or "").upper(), "Australia/Brisbane"))
         now = dt_util.now(tz)
         yesterday = (now - timedelta(days=1)).date()
 
@@ -112,7 +112,12 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
                 if day == yesterday:
                     day_usage = all_usage
                 else:
-                    day_data = await self.api.get_usage(session, account_number, day.isoformat(), day.isoformat())
+                    day_data = await self.api.get_usage(
+                        session,
+                        account_number,
+                        day.strftime("%d/%m/%Y"),
+                        (day + timedelta(days=1)).strftime("%d/%m/%Y"),
+                    )
                     day_usage = day_data.get("allUsage", [])
                 if not day_usage:
                     continue
