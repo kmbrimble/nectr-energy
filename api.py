@@ -18,6 +18,7 @@ class NectrApiClient:
         if self.token:
             headers["Authorization"] = f"bearer {self.token}"
         async with session.post(URL, json=payload, headers=headers) as response:
+            response.raise_for_status()
             data = await response.json()
             if "errors" in data:
                 raise ValueError(f"GraphQL Error: {data['errors']}")
