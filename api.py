@@ -45,7 +45,7 @@ class NectrApiClient:
         data = await self._post(session, payload)
         return [acc for acc in data.get("userBrief", {}).get("accounts", []) if acc.get("status") == "ACTIVE"]
 
-    async def get_usage(self, session, account_number):
+    async def get_usage(self, session, account_number, from_date="", to_date=""):
         payload = {
             "operationName": "getUsageInfo",
             "variables": {
@@ -53,8 +53,8 @@ class NectrApiClient:
                 "accountNumber": account_number,
                 "pageNumber": 1,
                 "granularity": "HOURLY",
-                "toDate": "",
-                "fromDate": ""
+                "toDate": to_date,
+                "fromDate": from_date
             },
             "query": "query getUsageInfo($accountNumber: String!, $isSmartMeterUser: Boolean!, $pageNumber: Int!, $granularity: GRANUALRITY, $fromDate: String!, $toDate: String!) { getUsageInfo(accountNumber: $accountNumber, isSmartMeterUser: $isSmartMeterUser, pageNumber: $pageNumber, granularity: $granularity, fromDate: $fromDate, toDate: $toDate) { secondaryHeader allUsage { controlLoadCost controlLoadUsage exportCost exportUsage gridUsage gridCost period __typename } gridConsumption { value } exportGridConsumption { value } controlledLoadConsumption { value } __typename } }"
         }
