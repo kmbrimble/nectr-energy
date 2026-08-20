@@ -1,0 +1,11 @@
+{
+  "domain": "nectr",
+  "name": "Nectr Energy",
+  "codeowners": ["@kizmcd"],
+  "config_flow": true,
+  "dependencies": ["recorder"],
+  "documentation": "https://github.com/kizmcd/nectr",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "1.0.0"
+}

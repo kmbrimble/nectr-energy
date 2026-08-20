@@ -1,0 +1,3 @@
+DOMAIN = "nectr"
+CONF_INTERVAL = "interval"
+DEFAULT_INTERVAL = 24
