@@ -56,21 +56,18 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
                         "product_info": product_info
                     }
 
-                    await self._inject_historical_data(acc_num, account.get("state"), usage)
+                    await self._inject_historical_data(session, acc_num, account.get("state"), usage)
                 return data
         except (aiohttp.ClientError, ValueError) as err:
             raise UpdateFailed(f"Error communicating with Nectr API: {err}") from err
 
-    async def _inject_historical_data(self, account_number, account_state, usage_data):
+    async def _inject_historical_data(self, session, account_number, account_state, usage_data):
         if not usage_data:
             return
         all_usage = usage_data.get("allUsage", [])
         if not all_usage:
             return
 
-        # ponytail: assumes the API's usage response always covers exactly
-        # "yesterday" relative to poll time; a missed poll only backfills the
-        # most recent day, not any gap. Add gap catch-up if that's needed.
         tz = ZoneInfo(STATE_TIMEZONES.get(account_state, "Australia/Brisbane"))
         now = dt_util.now(tz)
         yesterday = (now - timedelta(days=1)).date()
@@ -101,22 +98,71 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
             last_stats = await get_instance(self.hass).async_add_executor_job(
                 get_last_statistics, self.hass, 1, statistic_id, True, {"sum"}
             )
-            running_sum = last_stats[statistic_id][0]["sum"] if statistic_id in last_stats else 0.0
+            if statistic_id in last_stats:
+                last_entry = last_stats[statistic_id][0]
+                running_sum = last_entry["sum"] or 0.0
+                last_date = last_entry["start"].astimezone(tz).date()
+            else:
+                running_sum = 0.0
+                last_date = None
 
             statistics = []
 
-            sorted_usage = sorted(all_usage, key=lambda x: int(x["period"].split(":")[0]))
+            for day in _missing_dates(last_date, yesterday):
+                if day == yesterday:
+                    day_usage = all_usage
+                else:
+                    day_data = await self.api.get_usage(session, account_number, day.isoformat(), day.isoformat())
+                    day_usage = day_data.get("allUsage", [])
+                if not day_usage:
+                    continue
 
-            for item in sorted_usage:
-                hour = int(item["period"].split(":")[0])
-                start_time = datetime.combine(yesterday, datetime.min.time(), tzinfo=tz).replace(hour=hour)
-                val = item.get(usage_key, 0) or 0
-                running_sum += float(val)
-                
-                statistics.append(StatisticData(
-                    start=start_time,
-                    state=val,
-                    sum=running_sum
-                ))
+                sorted_usage = sorted(day_usage, key=lambda x: int(x["period"].split(":")[0]))
 
-            async_import_statistics(self.hass, metadata, statistics)
+                for item in sorted_usage:
+                    hour = int(item["period"].split(":")[0])
+                    start_time = datetime.combine(day, datetime.min.time(), tzinfo=tz).replace(hour=hour)
+                    val = item.get(usage_key, 0) or 0
+                    running_sum += float(val)
+
+                    statistics.append(StatisticData(
+                        start=start_time,
+                        state=val,
+                        sum=running_sum
+                    ))
+
+            if statistics:
+                async_import_statistics(self.hass, metadata, statistics)
+
+
+def _missing_dates(last_date, until_date, max_days=30):
+    """Days needing backfill, from the day after last_date through until_date inclusive.
+
+    Capped at max_days so a very long outage doesn't trigger an unbounded run of API calls;
+    anything older is left ungraphed (ponytail: raise max_days, or page further back, if a
+    longer catch-up window is ever needed).
+    """
+    if last_date is None:
+        return [until_date]
+    if last_date >= until_date:
+        return []
+    start = max(last_date + timedelta(days=1), until_date - timedelta(days=max_days - 1))
+    return [start + timedelta(days=i) for i in range((until_date - start).days + 1)]
+
+
+def _demo():
+    from datetime import date
+    y = date(2026, 8, 19)
+    assert _missing_dates(None, y) == [y]
+    assert _missing_dates(y, y) == []
+    assert _missing_dates(y - timedelta(days=1), y) == [y]
+    assert _missing_dates(y - timedelta(days=3), y) == [
+        y - timedelta(days=2), y - timedelta(days=1), y
+    ]
+    assert len(_missing_dates(y - timedelta(days=400), y)) == 30
+    assert _missing_dates(y - timedelta(days=400), y)[-1] == y
+
+
+if __name__ == "__main__":
+    _demo()
+    print("ok")
