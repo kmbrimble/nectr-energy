@@ -1,0 +1,40 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "email": "Email",
+          "password": "Password",
+          "interval": "Refresh Interval"
+        }
+      },
+      "sensors": {
+        "title": "Sensor visibility",
+        "description": "Choose whether each sensor is visible, hidden, or disabled.",
+        "data": {
+          "sensor_state_grid_consumption": "Grid Consumption",
+          "sensor_state_export_consumption": "Export Consumption",
+          "sensor_state_controlled_load": "Controlled Load",
+          "sensor_state_account_status": "Account Status",
+          "sensor_state_plan_name": "Plan Name",
+          "sensor_state_billing_start": "Billing Period Start",
+          "sensor_state_billing_end": "Billing Period End",
+          "sensor_state_balance": "Account Balance",
+          "sensor_state_power_perks_credit": "Power Perks Credit",
+          "sensor_state_power_perks_status": "Power Perks Status",
+          "sensor_state_tariff_general": "Tariff General Usage",
+          "sensor_state_tariff_export": "Tariff Solar Export",
+          "sensor_state_tariff_controlled_load": "Tariff Controlled Load",
+          "sensor_state_tariff_supply": "Tariff Supply Charge"
+        }
+      }
+    },
+    "error": {
+      "no_active_accounts": "No active Nectr accounts were found for this login.",
+      "auth_error": "Failed to authenticate with Nectr. Check your email and password."
+    },
+    "abort": {
+      "already_configured": "This Nectr account is already configured."
+    }
+  }
+}
