@@ -4,8 +4,7 @@
       "user": {
         "data": {
           "email": "Email",
-          "password": "Password",
-          "interval": "Refresh Interval"
+          "password": "Password"
         }
       },
       "sensors": {
@@ -35,6 +34,15 @@
     },
     "abort": {
       "already_configured": "This Nectr account is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "interval": "Refresh Interval"
+        }
+      }
     }
   }
 }

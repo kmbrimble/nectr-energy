@@ -10,7 +10,7 @@ from homeassistant.components.recorder.statistics import async_import_statistics
 from homeassistant.const import UnitOfEnergy
 from homeassistant.util import dt as dt_util
 from .api import NectrApiClient
-from .const import DOMAIN, CONF_INTERVAL
+from .const import DOMAIN, CONF_INTERVAL, DEFAULT_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
     def __init__(self, hass, entry):
         self.entry = entry
         self.api = NectrApiClient(entry.data["email"], entry.data["password"])
-        interval_hours = entry.data.get(CONF_INTERVAL, 24)
+        interval_hours = entry.options.get(CONF_INTERVAL, entry.data.get(CONF_INTERVAL, DEFAULT_INTERVAL))
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=timedelta(hours=interval_hours))
 
     async def _async_update_data(self):
