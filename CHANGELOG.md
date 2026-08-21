@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.5
+
+- Fixed `AttributeError: 'float' object has no attribute 'astimezone'` crashing the
+  coordinator on every poll during historical statistics backfill. `get_last_statistics()`
+  returns its `"start"` field as a raw Unix timestamp, not a `datetime` — now converted with
+  `dt_util.utc_from_timestamp` before use (#33)
+
 ## 1.2.4
 
 - Fixed `AttributeError: '...' object has no attribute '_attr_device_class'` crashing sensors
