@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.4
+
+- Fixed `AttributeError: '...' object has no attribute '_attr_device_class'` crashing sensors
+  that don't have a device class (Plan Name, Account Status, Meter Identifier, Next Scheduled
+  Payment Date, Direct Debit Date, Power Perks Status/Progress) on every update. This was
+  very likely the real cause of the "unavailable" sensors worked around in 1.2.3 (#30)
+
 ## 1.2.3
 
 - Account Status, Plan Name, and Power Perks Status now default to disabled on new installs
