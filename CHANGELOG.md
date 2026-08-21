@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.1
+
+- Added local `brand/` images (`icon.png`, `icon@2x.png`, `logo.png`, `logo@2x.png`) so the
+  integration icon shows in the Home Assistant UI without submitting to `home-assistant/brands`.
+  Requires **Home Assistant 2026.3 or later** — on older versions the integrations list will
+  still show the generic placeholder, since local brand image support (the Brands Proxy API)
+  was introduced in 2026.3.
+
 ## 1.2.0
 
 - Config flow: Refresh Interval is now a dropdown selector (was a radio-style list)
