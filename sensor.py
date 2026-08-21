@@ -1,10 +1,11 @@
 import re
 from datetime import date
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
-from homeassistant.const import UnitOfEnergy, CURRENCY_DOLLAR
+from homeassistant.const import UnitOfEnergy, CURRENCY_DOLLAR, PERCENTAGE
 from .const import (
     DOMAIN,
     DEFAULT_VISIBLE_SENSORS,
+    DEFAULT_DISABLED_SENSORS,
     SENSOR_STATE_VISIBLE,
     SENSOR_STATE_HIDDEN,
     SENSOR_STATE_DISABLED,
@@ -30,8 +31,14 @@ async def async_setup_entry(hass, entry, async_add_entities):
             NectrGenericSensor(coordinator, account_number, "Account Balance", "bill_info", "balance", "balance", device_class=SensorDeviceClass.MONETARY, uom=CURRENCY_DOLLAR),
             NectrGenericSensor(coordinator, account_number, "Power Perks Credit", "power_perks", "creditAmount", "power_perks_credit", device_class=SensorDeviceClass.MONETARY, uom=CURRENCY_DOLLAR),
             NectrGenericSensor(coordinator, account_number, "Power Perks Status", "power_perks", "statusText", "power_perks_status"),
+            NectrGenericSensor(coordinator, account_number, "Power Perks Progress", "power_perks", "percentage", "power_perks_percentage", uom=PERCENTAGE),
+            NectrGenericSensor(coordinator, account_number, "Total Due", "bill_info", "totalDue", "total_due", device_class=SensorDeviceClass.MONETARY, uom=CURRENCY_DOLLAR),
+            NectrGenericSensor(coordinator, account_number, "Next Scheduled Payment Date", "bill_info", "nextScheduledPaymentDate", "next_scheduled_payment_date"),
+            NectrGenericSensor(coordinator, account_number, "Direct Debit Amount", "bill_info", "directDebitAmount", "direct_debit_amount", device_class=SensorDeviceClass.MONETARY, uom=CURRENCY_DOLLAR),
+            NectrGenericSensor(coordinator, account_number, "Direct Debit Date", "bill_info", "directDebitDate", "direct_debit_date"),
+            NectrGenericSensor(coordinator, account_number, "Meter Identifier", "product_info", "nmi", "nmi"),
         ])
-        
+
         entities.extend([
             NectrTariffSensor(coordinator, account_number, "Tariff General Usage", "General usage charge", "tariff_general"),
             NectrTariffSensor(coordinator, account_number, "Tariff Solar Export", "Solar export to grid", "tariff_export"),
@@ -40,7 +47,12 @@ async def async_setup_entry(hass, entry, async_add_entities):
         ])
 
     for entity in entities:
-        default_state = SENSOR_STATE_VISIBLE if entity.unique_key in DEFAULT_VISIBLE_SENSORS else SENSOR_STATE_HIDDEN
+        if entity.unique_key in DEFAULT_VISIBLE_SENSORS:
+            default_state = SENSOR_STATE_VISIBLE
+        elif entity.unique_key in DEFAULT_DISABLED_SENSORS:
+            default_state = SENSOR_STATE_DISABLED
+        else:
+            default_state = SENSOR_STATE_HIDDEN
         state = entry.data.get(sensor_state_key(entity.unique_key), default_state)
         if state == SENSOR_STATE_DISABLED:
             entity._attr_entity_registry_enabled_default = False
@@ -50,11 +62,13 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(entities)
 
 class NectrBaseSensor(SensorEntity):
+    _attr_has_entity_name = True
+
     def __init__(self, coordinator, account_number, name, unique_key):
         self.coordinator = coordinator
         self.account_number = account_number
         self.unique_key = unique_key
-        self._attr_name = f"Nectr {account_number} {name}"
+        self._attr_name = name
         self._attr_unique_id = f"nectr_{account_number}_{unique_key}"
 
     @property

@@ -15,6 +15,7 @@ from .const import (
     DEFAULT_INTERVAL,
     INTERVAL_OPTIONS,
     DEFAULT_VISIBLE_SENSORS,
+    DEFAULT_DISABLED_SENSORS,
     SENSOR_CATALOG,
     SENSOR_STATE_VISIBLE,
     SENSOR_STATE_HIDDEN,
@@ -30,6 +31,14 @@ def _interval_selector() -> vol.All:
         SelectSelector(SelectSelectorConfig(options=options, mode=SelectSelectorMode.DROPDOWN)),
         vol.Coerce(int),
     )
+
+
+def _default_sensor_state(key: str) -> str:
+    if key in DEFAULT_VISIBLE_SENSORS:
+        return SENSOR_STATE_VISIBLE
+    if key in DEFAULT_DISABLED_SENSORS:
+        return SENSOR_STATE_DISABLED
+    return SENSOR_STATE_HIDDEN
 
 
 class NectrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -82,7 +91,7 @@ class NectrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         schema = vol.Schema({
             vol.Required(
                 sensor_state_key(key),
-                default=SENSOR_STATE_VISIBLE if key in DEFAULT_VISIBLE_SENSORS else SENSOR_STATE_HIDDEN,
+                default=_default_sensor_state(key),
             ): SelectSelector(
                 SelectSelectorConfig(options=state_options, mode=SelectSelectorMode.DROPDOWN)
             )
