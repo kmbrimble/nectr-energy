@@ -99,8 +99,7 @@ class NectrGenericSensor(NectrBaseSensor):
         super().__init__(coordinator, account_number, name, unique_key)
         self.category = category
         self.data_key = data_key
-        if device_class:
-            self._attr_device_class = device_class
+        self._attr_device_class = device_class
         if uom:
             self._attr_native_unit_of_measurement = uom
 
