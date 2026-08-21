@@ -2,12 +2,17 @@ import re
 from datetime import date
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
 from homeassistant.const import UnitOfEnergy, CURRENCY_DOLLAR
-from .const import DOMAIN, CONF_VISIBLE_SENSORS, CONF_DISABLED_SENSORS, DEFAULT_VISIBLE_SENSORS
+from .const import (
+    DOMAIN,
+    DEFAULT_VISIBLE_SENSORS,
+    SENSOR_STATE_VISIBLE,
+    SENSOR_STATE_HIDDEN,
+    SENSOR_STATE_DISABLED,
+    sensor_state_key,
+)
 
 async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    visible_keys = entry.data.get(CONF_VISIBLE_SENSORS, DEFAULT_VISIBLE_SENSORS)
-    disabled_keys = entry.data.get(CONF_DISABLED_SENSORS, [])
     entities = []
     
     for account_number in coordinator.data:
@@ -35,10 +40,12 @@ async def async_setup_entry(hass, entry, async_add_entities):
         ])
 
     for entity in entities:
-        if entity.unique_key in disabled_keys:
+        default_state = SENSOR_STATE_VISIBLE if entity.unique_key in DEFAULT_VISIBLE_SENSORS else SENSOR_STATE_HIDDEN
+        state = entry.data.get(sensor_state_key(entity.unique_key), default_state)
+        if state == SENSOR_STATE_DISABLED:
             entity._attr_entity_registry_enabled_default = False
         else:
-            entity._attr_entity_registry_visible_default = entity.unique_key in visible_keys
+            entity._attr_entity_registry_visible_default = state == SENSOR_STATE_VISIBLE
 
     async_add_entities(entities)
 
