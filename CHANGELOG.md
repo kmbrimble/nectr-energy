@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.2
+
+- Fixed "expected str" error when submitting the credentials screen, caused by the Refresh
+  Interval dropdown's default value not being a string
+- Moved Refresh Interval off the credentials screen; new installs default to 24h and it's now
+  editable afterwards via Settings > Devices & Services > Nectr > Configure (#25)
+
 ## 1.2.1
 
 - Added local `brand/` images (`icon.png`, `icon@2x.png`, `logo.png`, `logo@2x.png`) so the
