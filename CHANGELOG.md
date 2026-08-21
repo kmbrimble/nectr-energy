@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.3
+
+- Account Status, Plan Name, and Power Perks Status now default to disabled on new installs
+  instead of showing up unavailable
+- Added sensors for Total Due, Next Scheduled Payment Date, Direct Debit Amount, Direct Debit
+  Date, Meter Identifier, and Power Perks Progress — data already fetched but not previously
+  exposed as entities (hidden by default)
+- Sensor names no longer include the account number/"Nectr" prefix; entities now use HA's
+  `has_entity_name` convention and rely on device grouping instead (#27)
+
 ## 1.2.2
 
 - Fixed "expected str" error when submitting the credentials screen, caused by the Refresh
