@@ -18,13 +18,21 @@ SENSOR_CATALOG = {
     "balance": "Account Balance",
     "power_perks_credit": "Power Perks Credit",
     "power_perks_status": "Power Perks Status",
+    "power_perks_percentage": "Power Perks Progress",
     "tariff_general": "Tariff General Usage",
     "tariff_export": "Tariff Solar Export",
     "tariff_controlled_load": "Tariff Controlled Load",
     "tariff_supply": "Tariff Supply Charge",
+    "total_due": "Total Due",
+    "next_scheduled_payment_date": "Next Scheduled Payment Date",
+    "direct_debit_amount": "Direct Debit Amount",
+    "direct_debit_date": "Direct Debit Date",
+    "nmi": "Meter Identifier",
 }
 
 DEFAULT_VISIBLE_SENSORS = ["grid_consumption", "export_consumption", "controlled_load"]
+
+DEFAULT_DISABLED_SENSORS = ["account_status", "plan_name", "power_perks_status"]
 
 
 def sensor_state_key(sensor_key: str) -> str:

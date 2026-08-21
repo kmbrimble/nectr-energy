@@ -21,10 +21,16 @@
           "sensor_state_balance": "Account Balance",
           "sensor_state_power_perks_credit": "Power Perks Credit",
           "sensor_state_power_perks_status": "Power Perks Status",
+          "sensor_state_power_perks_percentage": "Power Perks Progress",
           "sensor_state_tariff_general": "Tariff General Usage",
           "sensor_state_tariff_export": "Tariff Solar Export",
           "sensor_state_tariff_controlled_load": "Tariff Controlled Load",
-          "sensor_state_tariff_supply": "Tariff Supply Charge"
+          "sensor_state_tariff_supply": "Tariff Supply Charge",
+          "sensor_state_total_due": "Total Due",
+          "sensor_state_next_scheduled_payment_date": "Next Scheduled Payment Date",
+          "sensor_state_direct_debit_amount": "Direct Debit Amount",
+          "sensor_state_direct_debit_date": "Direct Debit Date",
+          "sensor_state_nmi": "Meter Identifier"
         }
       }
     },
