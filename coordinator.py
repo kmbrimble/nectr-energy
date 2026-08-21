@@ -101,7 +101,7 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
             if statistic_id in last_stats:
                 last_entry = last_stats[statistic_id][0]
                 running_sum = last_entry["sum"] or 0.0
-                last_date = last_entry["start"].astimezone(tz).date()
+                last_date = dt_util.utc_from_timestamp(last_entry["start"]).astimezone(tz).date()
             else:
                 running_sum = 0.0
                 last_date = None
@@ -156,7 +156,15 @@ def _missing_dates(last_date, until_date, max_days=30):
 
 
 def _demo():
-    from datetime import date
+    from datetime import date, timezone
+
+    # Regression guard for #33: get_last_statistics()'s "start" is a raw float
+    # Unix timestamp, not a datetime, so it must be converted before .astimezone().
+    raw_start_ts = 1755561600.0  # 2025-08-19T00:00:00Z
+    converted = datetime.fromtimestamp(raw_start_ts, tz=timezone.utc)
+    assert converted.astimezone(ZoneInfo("Australia/Brisbane")).date() == date(2025, 8, 19)
+    assert not hasattr(raw_start_ts, "astimezone")
+
     y = date(2026, 8, 19)
     assert _missing_dates(None, y) == [y]
     assert _missing_dates(y, y) == []
