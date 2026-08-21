@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0
+
+- Config flow: Refresh Interval is now a dropdown selector (was a radio-style list)
+- Config flow: replaced the separate visible/disabled sensor multi-select lists with a
+  single visible/hidden/disabled dropdown per sensor
+- Added `strings.json` and `translations/en.json` for the config flow UI labels
+- Added brand icons (`brands/icon.png`, `brands/icon@2x.png`)
+- Fixed repository structure for HACS (`content_in_root`)
+
 ## 1.1.0
 
 - Config flow: added a sensor visibility step (visible/disabled multi-select lists) after
