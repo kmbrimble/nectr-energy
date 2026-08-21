@@ -1,4 +1,5 @@
 {
   "name": "Nectr Energy",
-  "render_readme": false
+  "render_readme": false,
+  "content_in_root": true
 }
