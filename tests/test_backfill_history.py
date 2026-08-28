@@ -21,10 +21,15 @@ def demo():
     coordinator_source = (ROOT / "coordinator.py").read_text()
     assert "async def async_backfill_history" in coordinator_source
     assert "async def async_has_existing_statistics" in coordinator_source
-    assert "from homeassistant.components.recorder.statistics import" in coordinator_source
-    assert "clear_statistics" in coordinator_source, (
+    assert "async_clear_statistics(" in coordinator_source, (
         "backfill must clear existing statistics before re-importing, since splicing older "
         "data in front of an existing cumulative sum series would make it non-monotonic"
+    )
+    assert "async_add_executor_job(\n            clear_statistics" not in coordinator_source, (
+        "regression guard: statistics.clear_statistics() asserts it runs on the recorder's own "
+        "thread — running it via async_add_executor_job uses the generic executor pool instead "
+        "and raises 'Detected unsafe call not in recorder thread'. Use "
+        "Recorder.async_clear_statistics() (a queued task) instead."
     )
 
     init_source = (ROOT / "__init__.py").read_text()
