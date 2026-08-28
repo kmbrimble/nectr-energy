@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+- Fixed historical statistics backfill importing daily totals instead of hourly usage for
+  "yesterday". `_inject_historical_data` was reusing the `allUsage` blob from the no-date-range
+  `get_usage()` call (used for live sensor state) as a shortcut for yesterday's data, but that
+  call doesn't reliably return hourly-granularity data — only explicit-date-range `HOURLY`
+  requests do. Every day in the backfill window, including yesterday, is now fetched with an
+  explicit date range (#36)
+
 ## 1.2.5
 
 - Fixed `AttributeError: 'float' object has no attribute 'astimezone'` crashing the

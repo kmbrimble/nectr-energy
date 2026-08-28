@@ -56,18 +56,12 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
                         "product_info": product_info
                     }
 
-                    await self._inject_historical_data(session, acc_num, account.get("state"), usage)
+                    await self._inject_historical_data(session, acc_num, account.get("state"))
                 return data
         except (aiohttp.ClientError, ValueError) as err:
             raise UpdateFailed(f"Error communicating with Nectr API: {err}") from err
 
-    async def _inject_historical_data(self, session, account_number, account_state, usage_data):
-        if not usage_data:
-            return
-        all_usage = usage_data.get("allUsage", [])
-        if not all_usage:
-            return
-
+    async def _inject_historical_data(self, session, account_number, account_state):
         tz = ZoneInfo(STATE_TIMEZONES.get((account_state or "").upper(), "Australia/Brisbane"))
         now = dt_util.now(tz)
         yesterday = (now - timedelta(days=1)).date()
@@ -109,16 +103,13 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
             statistics = []
 
             for day in _missing_dates(last_date, yesterday):
-                if day == yesterday:
-                    day_usage = all_usage
-                else:
-                    day_data = await self.api.get_usage(
-                        session,
-                        account_number,
-                        day.strftime("%d/%m/%Y"),
-                        (day + timedelta(days=1)).strftime("%d/%m/%Y"),
-                    )
-                    day_usage = day_data.get("allUsage", [])
+                day_data = await self.api.get_usage(
+                    session,
+                    account_number,
+                    day.strftime("%d/%m/%Y"),
+                    (day + timedelta(days=1)).strftime("%d/%m/%Y"),
+                )
+                day_usage = day_data.get("allUsage", [])
                 if not day_usage:
                     continue
 
