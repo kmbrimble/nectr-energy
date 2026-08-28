@@ -3,6 +3,12 @@ CONF_INTERVAL = "interval"
 DEFAULT_INTERVAL = 24
 INTERVAL_OPTIONS = [1, 3, 6, 12, 24]
 
+SERVICE_BACKFILL_HISTORY = "backfill_history"
+BACKFILL_INITIAL_DAYS = 365
+# ponytail: hard ceiling on a manually requested backfill so a typo (e.g. days=100000) can't
+# turn into tens of thousands of sequential API calls. Raise if longer history is ever needed.
+MAX_BACKFILL_DAYS = 1095
+
 SENSOR_STATE_VISIBLE = "visible"
 SENSOR_STATE_HIDDEN = "hidden"
 SENSOR_STATE_DISABLED = "disabled"

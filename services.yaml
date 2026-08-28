@@ -1,0 +1,17 @@
+backfill_history:
+  name: Backfill history
+  description: >-
+    Re-import hourly Grid Consumption, Export Consumption, and Controlled Load history
+    for every configured Nectr account. Clears whatever is currently stored for those
+    statistics first, then re-imports the requested window from scratch.
+  fields:
+    days:
+      name: Days
+      description: How many days back to backfill, ending yesterday.
+      example: 365
+      default: 365
+      selector:
+        number:
+          min: 1
+          max: 1095
+          mode: box
