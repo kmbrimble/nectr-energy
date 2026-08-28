@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## 1.2.7
+
 - Added a real initial history backfill: on first setup, once entities exist, the integration
   now imports up to a year of hourly Grid Consumption / Export Consumption / Controlled Load
   history in the background instead of a single day.
