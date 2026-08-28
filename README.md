@@ -12,9 +12,50 @@ it as Home Assistant sensors, with historical usage backfilled into the Energy d
 The integration authenticates against Nectr's mobile GraphQL API
 (`mobile.nectr.com.au/graphql`) with your account email and password, then polls it on a
 configurable interval for each active account on your login: usage, billing, Power Perks, and
-tariff data. Each poll also backfills the previous day's hourly grid/export/controlled-load usage
-into Home Assistant's recorder statistics, so the Energy dashboard has continuous history rather
-than a gap before setup.
+tariff data. Each poll also catches up any missing hourly grid/export/controlled-load usage into
+Home Assistant's recorder statistics, so the Energy dashboard has continuous history rather than
+a gap before setup.
+
+On first install, once the sensor entities exist, the integration automatically backfills up to a
+year of hourly history in the background (see **Historical data** below) — this only happens
+once, the first time a tracked statistic has no data yet.
+
+## Historical data
+
+**Initial backfill.** After setup, once entities are created, the integration imports up to a
+year of hourly Grid Consumption / Export Consumption / Controlled Load history in the background.
+This runs automatically exactly once, the first time each statistic has no existing data — it
+won't re-run on every restart.
+
+**Re-running a backfill.** If you want to redo the backfill (for example, you'd only just joined
+Nectr when you installed, or the initial run missed data due to a transient API issue), call the
+**Nectr: Backfill history** action (`nectr.backfill_history`) from **Developer Tools → Actions**,
+with an optional `days` field (default 365, max 1095) for how far back to go. This **clears and
+fully re-imports** the tracked statistics rather than trying to splice older data in front of
+what's already there — Home Assistant statistics require a monotonically increasing cumulative
+sum, and a freshly computed earlier window starting its own sum from 0 would create a
+discontinuity against whatever sum the existing data already reached. The Energy dashboard reads
+deltas, so this reset doesn't affect what it displays.
+
+**Recent history not showing up.** Home Assistant's History page prefers an entity's raw recorded
+states over its long-term statistics whenever both exist for the same period, and it keeps raw
+states for roughly the last 10 days by default. That means recently imported hourly statistics
+can be invisible in History even though they imported correctly — it's showing you the sensor's
+regular state updates instead, which won't have hourly granularity. To check statistics
+directly, use the Energy dashboard (it always reads statistics, never raw states) or the
+`recorder.get_statistics` action. If you want History itself to show the hourly data for that
+window, clear the raw state history for the affected sensors — it doesn't touch the imported
+statistics — with **Recorder: Purge entities** (`recorder.purge_entities`):
+
+```yaml
+action: recorder.purge_entities
+data:
+  entity_id:
+    - sensor.your_grid_consumption_entity
+    - sensor.your_export_consumption_entity
+    - sensor.your_controlled_load_entity
+  keep_days: 0
+```
 
 ## Pre-requisites
 
