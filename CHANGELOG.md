@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## 1.2.6
+
 - Fixed historical statistics backfill importing daily totals instead of hourly usage for
   "yesterday". `_inject_historical_data` was reusing the `allUsage` blob from the no-date-range
   `get_usage()` call (used for live sensor state) as a shortcut for yesterday's data, but that
