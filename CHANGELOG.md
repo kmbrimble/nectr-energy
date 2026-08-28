@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## 1.2.9
+
+- Fixed a deprecation warning ("doesn't specify mean_type when calling async_import_statistics",
+  removal scheduled for HA 2026.11) by replacing the deprecated `has_mean` field with
+  `mean_type=StatisticMeanType.NONE` in both `StatisticMetaData` call sites.
+- Added a warning log when the Nectr API returns no hourly usage for a day inside the backfill
+  window, so a partial backfill (data lag vs. an actual bug) is diagnosable from the logs.
+
 ## 1.2.8
 
 - Fixed `RuntimeError: Detected unsafe call not in recorder thread` crashing the

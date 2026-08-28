@@ -6,7 +6,7 @@ import aiohttp
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.components.recorder import get_instance
-from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
+from homeassistant.components.recorder.models import StatisticData, StatisticMeanType, StatisticMetaData
 from homeassistant.components.recorder.statistics import async_import_statistics, get_last_statistics
 from homeassistant.const import UnitOfEnergy
 from homeassistant.util import dt as dt_util
@@ -84,7 +84,7 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
                 continue
 
             metadata = StatisticMetaData(
-                has_mean=False,
+                mean_type=StatisticMeanType.NONE,
                 has_sum=True,
                 name=f"Nectr {account_number} {metric_key.replace('_', ' ').title()}",
                 source="recorder",
@@ -205,7 +205,7 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
                 "usage_key": usage_key,
                 "statistic_id": statistic_id,
                 "metadata": StatisticMetaData(
-                    has_mean=False,
+                    mean_type=StatisticMeanType.NONE,
                     has_sum=True,
                     name=f"Nectr {account_number} {metric_key.replace('_', ' ').title()}",
                     source="recorder",
@@ -231,6 +231,10 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
             )
             day_usage = day_data.get("allUsage", [])
             if not day_usage:
+                _LOGGER.warning(
+                    "Nectr API returned no hourly usage for %s (account %s) during backfill — "
+                    "skipping that day", day.isoformat(), account_number
+                )
                 continue
 
             sorted_usage = sorted(day_usage, key=lambda x: int(x["period"].split(":")[0]))
