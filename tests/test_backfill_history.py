@@ -31,6 +31,11 @@ def demo():
         "and raises 'Detected unsafe call not in recorder thread'. Use "
         "Recorder.async_clear_statistics() (a queued task) instead."
     )
+    assert "has_mean=" not in coordinator_source, (
+        "regression guard: has_mean is deprecated in favour of mean_type and logs a removal "
+        "warning (HA 2026.11) — use StatisticMeanType.NONE instead"
+    )
+    assert "StatisticMeanType.NONE" in coordinator_source
 
     init_source = (ROOT / "__init__.py").read_text()
     assert "SERVICE_BACKFILL_HISTORY" in init_source
