@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import timedelta, datetime
 from zoneinfo import ZoneInfo
@@ -6,11 +7,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
-from homeassistant.components.recorder.statistics import (
-    async_import_statistics,
-    clear_statistics,
-    get_last_statistics,
-)
+from homeassistant.components.recorder.statistics import async_import_statistics, get_last_statistics
 from homeassistant.const import UnitOfEnergy
 from homeassistant.util import dt as dt_util
 from .api import NectrApiClient
@@ -21,6 +18,8 @@ METRICS = {
     "export_consumption": "exportUsage",
     "controlled_load": "controlLoadUsage"
 }
+
+CLEAR_STATISTICS_TIMEOUT = 10
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -172,6 +171,25 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
             for account in accounts:
                 await self._backfill_account(session, account["number"], account.get("state"), days)
 
+    async def _async_clear_statistics(self, statistic_ids: list[str]) -> None:
+        """Clear statistics via the recorder's own queued task, not a generic executor thread.
+
+        `statistics.clear_statistics()` asserts it's running on the recorder's dedicated
+        thread; calling it through `async_add_executor_job` uses the general executor pool
+        instead and trips that assertion. `Recorder.async_clear_statistics()` queues the
+        work correctly — it's fire-and-forget, so wait on its `on_done` callback like HA's
+        own `recorder/clear_statistics` websocket handler does.
+        """
+        done = asyncio.Event()
+        get_instance(self.hass).async_clear_statistics(
+            statistic_ids, on_done=lambda: self.hass.loop.call_soon_threadsafe(done.set)
+        )
+        try:
+            async with asyncio.timeout(CLEAR_STATISTICS_TIMEOUT):
+                await done.wait()
+        except TimeoutError:
+            _LOGGER.warning("Timed out clearing statistics for %s before backfill", statistic_ids)
+
     async def _backfill_account(self, session, account_number, account_state, days):
         tz = ZoneInfo(STATE_TIMEZONES.get((account_state or "").upper(), "Australia/Brisbane"))
         yesterday = (dt_util.now(tz) - timedelta(days=1)).date()
@@ -201,10 +219,7 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
         if not tracked:
             return
 
-        instance = get_instance(self.hass)
-        await instance.async_add_executor_job(
-            clear_statistics, instance, [t["statistic_id"] for t in tracked.values()]
-        )
+        await self._async_clear_statistics([t["statistic_id"] for t in tracked.values()])
 
         for i in range(days):
             day = start_day + timedelta(days=i)

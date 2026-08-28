@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## 1.2.8
+
+- Fixed `RuntimeError: Detected unsafe call not in recorder thread` crashing the
+  `nectr.backfill_history` service every time it ran. It cleared statistics via
+  `statistics.clear_statistics()` through `async_add_executor_job`, which runs on the generic
+  executor pool — but that function asserts it's on the recorder's own dedicated thread. Now
+  uses `Recorder.async_clear_statistics()`, the queued-task API the recorder itself uses for
+  this (#36 follow-up)
+
 ## 1.2.7
 
 - Added a real initial history backfill: on first setup, once entities exist, the integration
