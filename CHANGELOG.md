@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+- Added a real initial history backfill: on first setup, once entities exist, the integration
+  now imports up to a year of hourly Grid Consumption / Export Consumption / Controlled Load
+  history in the background instead of a single day.
+- Added a `nectr.backfill_history` service (optional `days` field, default 365, max 1095) so an
+  already-installed integration can re-run a full backfill on demand — it clears and re-imports
+  the tracked statistics rather than trying to splice older data in front of what's already
+  there, since Home Assistant statistics require a monotonically increasing cumulative `sum` and
+  splicing would break that. Running it resets each statistic's cumulative sum to start from the
+  new backfill window; the Energy dashboard reads deltas so this doesn't affect it (#36 follow-up)
+
 ## 1.2.6
 
 - Fixed historical statistics backfill importing daily totals instead of hourly usage for
