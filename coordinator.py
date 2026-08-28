@@ -6,11 +6,21 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
-from homeassistant.components.recorder.statistics import async_import_statistics, get_last_statistics
+from homeassistant.components.recorder.statistics import (
+    async_import_statistics,
+    clear_statistics,
+    get_last_statistics,
+)
 from homeassistant.const import UnitOfEnergy
 from homeassistant.util import dt as dt_util
 from .api import NectrApiClient
-from .const import DOMAIN, CONF_INTERVAL, DEFAULT_INTERVAL
+from .const import DOMAIN, CONF_INTERVAL, DEFAULT_INTERVAL, BACKFILL_INITIAL_DAYS
+
+METRICS = {
+    "grid_consumption": "gridUsage",
+    "export_consumption": "exportUsage",
+    "controlled_load": "controlLoadUsage"
+}
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -66,15 +76,9 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
         now = dt_util.now(tz)
         yesterday = (now - timedelta(days=1)).date()
 
-        metrics = {
-            "grid_consumption": "gridUsage",
-            "export_consumption": "exportUsage",
-            "controlled_load": "controlLoadUsage"
-        }
-
         registry = er.async_get(self.hass)
 
-        for metric_key, usage_key in metrics.items():
+        for metric_key, usage_key in METRICS.items():
             unique_id = f"nectr_{account_number}_{metric_key}"
             statistic_id = registry.async_get_entity_id("sensor", DOMAIN, unique_id)
             if statistic_id is None:
@@ -129,6 +133,108 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
 
             if statistics:
                 async_import_statistics(self.hass, metadata, statistics)
+
+    async def async_has_existing_statistics(self) -> bool:
+        """Whether any tracked metric already has statistics, for any account.
+
+        Gates the one-time automatic backfill so it only fires on a genuinely fresh
+        install, not on every HA restart/reload of an already-populated entry.
+        """
+        if not self.data:
+            return False
+        registry = er.async_get(self.hass)
+        instance = get_instance(self.hass)
+        for acc_num in self.data:
+            for metric_key in METRICS:
+                statistic_id = registry.async_get_entity_id("sensor", DOMAIN, f"nectr_{acc_num}_{metric_key}")
+                if statistic_id is None:
+                    continue
+                last_stats = await instance.async_add_executor_job(
+                    get_last_statistics, self.hass, 1, statistic_id, True, {"sum"}
+                )
+                if statistic_id in last_stats:
+                    return True
+        return False
+
+    async def async_backfill_history(self, days: int = BACKFILL_INITIAL_DAYS) -> None:
+        """Wipe and re-import `days` of hourly history for every tracked metric.
+
+        Used both for the one-time automatic backfill on fresh install and for the
+        on-demand `nectr.backfill_history` service. Clears existing statistics first
+        rather than splicing older data in front of what's already there — HA statistics
+        require a monotonically increasing cumulative `sum`, and a freshly computed
+        earlier window starting its own sum from 0 would create a discontinuity against
+        whatever sum the existing data already reached.
+        """
+        async with aiohttp.ClientSession() as session:
+            await self.api.authenticate(session)
+            accounts = await self.api.get_accounts(session)
+            for account in accounts:
+                await self._backfill_account(session, account["number"], account.get("state"), days)
+
+    async def _backfill_account(self, session, account_number, account_state, days):
+        tz = ZoneInfo(STATE_TIMEZONES.get((account_state or "").upper(), "Australia/Brisbane"))
+        yesterday = (dt_util.now(tz) - timedelta(days=1)).date()
+        start_day = yesterday - timedelta(days=days - 1)
+
+        registry = er.async_get(self.hass)
+        tracked = {}
+        for metric_key, usage_key in METRICS.items():
+            statistic_id = registry.async_get_entity_id("sensor", DOMAIN, f"nectr_{account_number}_{metric_key}")
+            if statistic_id is None:
+                continue
+            tracked[metric_key] = {
+                "usage_key": usage_key,
+                "statistic_id": statistic_id,
+                "metadata": StatisticMetaData(
+                    has_mean=False,
+                    has_sum=True,
+                    name=f"Nectr {account_number} {metric_key.replace('_', ' ').title()}",
+                    source="recorder",
+                    statistic_id=statistic_id,
+                    unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR
+                ),
+                "running_sum": 0.0,
+                "statistics": [],
+            }
+
+        if not tracked:
+            return
+
+        instance = get_instance(self.hass)
+        await instance.async_add_executor_job(
+            clear_statistics, instance, [t["statistic_id"] for t in tracked.values()]
+        )
+
+        for i in range(days):
+            day = start_day + timedelta(days=i)
+            day_data = await self.api.get_usage(
+                session,
+                account_number,
+                day.strftime("%d/%m/%Y"),
+                (day + timedelta(days=1)).strftime("%d/%m/%Y"),
+            )
+            day_usage = day_data.get("allUsage", [])
+            if not day_usage:
+                continue
+
+            sorted_usage = sorted(day_usage, key=lambda x: int(x["period"].split(":")[0]))
+
+            for item in sorted_usage:
+                hour = int(item["period"].split(":")[0])
+                start_time = datetime.combine(day, datetime.min.time(), tzinfo=tz).replace(hour=hour)
+                for metric in tracked.values():
+                    val = item.get(metric["usage_key"], 0) or 0
+                    metric["running_sum"] += float(val)
+                    metric["statistics"].append(StatisticData(
+                        start=start_time,
+                        state=val,
+                        sum=metric["running_sum"]
+                    ))
+
+        for metric in tracked.values():
+            if metric["statistics"]:
+                async_import_statistics(self.hass, metric["metadata"], metric["statistics"])
 
 
 def _missing_dates(last_date, until_date, max_days=30):

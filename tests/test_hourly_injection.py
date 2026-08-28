@@ -13,7 +13,7 @@ def demo():
     source = (ROOT / "coordinator.py").read_text()
 
     inject_match = re.search(
-        r"async def _inject_historical_data\(.*?\n(?=\n(?:def|async def|class)\s|\Z)",
+        r"    async def _inject_historical_data\(.*?\n(?=    (?:async )?def\s|\Z)",
         source,
         re.S,
     )
