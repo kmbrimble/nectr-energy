@@ -27,7 +27,7 @@ def default_sensor_state(key):
     return SENSOR_STATE_HIDDEN
 
 
-def demo():
+def test_demo():
     assert default_sensor_state("grid_consumption") == SENSOR_STATE_VISIBLE
     assert default_sensor_state("account_status") == SENSOR_STATE_DISABLED
     assert default_sensor_state("plan_name") == SENSOR_STATE_DISABLED
@@ -44,4 +44,4 @@ def demo():
 
 
 if __name__ == "__main__":
-    demo()
+    test_demo()

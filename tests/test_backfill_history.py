@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT))
 from const import DOMAIN, BACKFILL_INITIAL_DAYS, MAX_BACKFILL_DAYS, SERVICE_BACKFILL_HISTORY
 
 
-def demo():
+def test_demo():
     assert BACKFILL_INITIAL_DAYS > 30, "initial backfill must cover far more than the old single-day default"
     assert MAX_BACKFILL_DAYS >= BACKFILL_INITIAL_DAYS
     assert SERVICE_BACKFILL_HISTORY == "backfill_history"
@@ -54,4 +54,4 @@ def demo():
 
 
 if __name__ == "__main__":
-    demo()
+    test_demo()

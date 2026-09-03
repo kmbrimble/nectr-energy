@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 
-def demo():
+def test_demo():
     source = (ROOT / "coordinator.py").read_text()
 
     inject_match = re.search(
@@ -43,4 +43,4 @@ def demo():
 
 
 if __name__ == "__main__":
-    demo()
+    test_demo()
