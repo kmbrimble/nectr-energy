@@ -27,8 +27,9 @@ filename, exits non-zero if any failed.
 Use that exact form. `|| break` looks equivalent and is not: `break` returns 0, so the loop
 exits 0 and a failing suite reports success.
 
-**pytest collects nothing here.** Test functions are named `demo()`, not `test_*`, so
-`pytest tests/` passes having run zero tests. Never take that as green.
+Functions are named `test_demo()`, so `pytest tests/` collects them too. The loop above
+stays the documented command: it needs no install, and there is no dependency file to add
+pytest to.
 
 `coordinator.py` also has a `_demo()` self-test (`python3 coordinator.py`), but it imports
 `aiohttp` and `homeassistant` at module level, so it runs only inside an HA environment.

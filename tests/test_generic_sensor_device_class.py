@@ -51,7 +51,7 @@ sys.modules["nectr.sensor"] = sensor_module
 spec.loader.exec_module(sensor_module)
 
 
-def demo():
+def test_demo():
     class FakeCoordinator:
         data = {"acc1": {"account_info": {"planName": "Some Plan"}}}
 
@@ -64,4 +64,4 @@ def demo():
 
 
 if __name__ == "__main__":
-    demo()
+    test_demo()
