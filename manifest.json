@@ -4,7 +4,7 @@
   "codeowners": ["@kizmcd"],
   "config_flow": true,
   "dependencies": ["recorder"],
-  "documentation": "https://github.com/kizmcd/nectr",
+  "documentation": "https://github.com/kmbrimble/nectr-energy",
   "iot_class": "cloud_polling",
   "requirements": [],
   "version": "1.2.9"
