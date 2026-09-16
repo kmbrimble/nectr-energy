@@ -4,3 +4,5 @@ nectr_graphql_logs.jsonl
 __pycache__/
 *.pyc
 CLAUDE.local.md
+.venv/
+.pytest_cache/
