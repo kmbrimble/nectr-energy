@@ -18,7 +18,13 @@ class NectrApiClient:
         if self.token:
             headers["Authorization"] = f"bearer {self.token}"
         async with session.post(URL, json=payload, headers=headers) as response:
-            response.raise_for_status()
+            if response.status >= 400:
+                # The server reports schema drift as HTTP 400 with the offending field named in
+                # the body; raise_for_status() discards the body and logs only "Bad Request".
+                body = await response.text()
+                raise ValueError(
+                    f"HTTP {response.status} from {payload['operationName']}: {body[:500]}"
+                )
             data = await response.json()
             if "errors" in data:
                 raise ValueError(f"GraphQL Error: {data['errors']}")
@@ -92,7 +98,7 @@ class NectrApiClient:
         payload = {
             "operationName": "getMyProductInfo",
             "variables": {"accountNumber": account_number},
-            "query": "query getMyProductInfo($accountNumber: String!) { myProductInfo(accountNumber: $accountNumber) { validFrom isEligibleForUpdate isOnBestOffer nmi features { text key value subFeature { key value } } } }"
+            "query": "query getMyProductInfo($accountNumber: String!) { myProductInfo(accountNumber: $accountNumber) { validFrom nmi features { text key value subFeature { key value } } } }"
         }
         data = await self._post(session, payload)
         return data.get("myProductInfo", {})

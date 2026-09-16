@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## 1.2.10
+
+- Fixed the integration being stuck in setup retry with `400, message='Bad Request'`. Nectr
+  removed `isEligibleForUpdate` and `isOnBestOffer` from `MyProduct`, so the product-info query
+  was rejected outright. Both fields were unused and are gone from the query. HTTP errors now
+  log the server's response body, which names the failing field, not just "Bad Request".
+- Fixed corrupted usage history (sums running backwards, negative or zero days). The energy
+  sensors had `state_class: total`, so the recorder compiled its own hourly statistics for the
+  same ids the backfill imported into, and overwrote them. History now goes into external
+  statistics (`nectr:<account>_<metric>`, source `nectr`), and the energy sensors no longer have
+  a state class. The first start after upgrading backfills a year into the new ids
+  automatically.
+- Backfill no longer logs a warning for every empty day before supply started, only for gaps
+  after the first day with data.
+- Statistics metadata now sets `unit_class`, which HA 2026.11 will require.
+
 ## 1.2.9
 
 - Fixed a deprecation warning ("doesn't specify mean_type when calling async_import_statistics",

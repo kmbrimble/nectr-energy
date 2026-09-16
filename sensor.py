@@ -1,6 +1,6 @@
 import re
 from datetime import date
-from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
+from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.const import UnitOfEnergy, CURRENCY_DOLLAR, PERCENTAGE
 from .const import (
     DOMAIN,
@@ -85,7 +85,10 @@ class NectrEnergySensor(NectrBaseSensor):
         self.category = category
         self.data_key = data_key
         self._attr_device_class = SensorDeviceClass.ENERGY
-        self._attr_state_class = SensorStateClass.TOTAL
+        # No state_class on purpose: the value is the latest day's total, and a state_class
+        # makes the recorder compile its own statistics for this entity. Those collided with
+        # the imported hourly history and corrupted it; history now lives in external
+        # statistics (coordinator.external_statistic_id) instead.
         self._attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
 
     @property
