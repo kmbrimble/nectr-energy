@@ -1,13 +1,13 @@
 import asyncio
 import logging
+import re
 from datetime import timedelta, datetime
 from zoneinfo import ZoneInfo
 import aiohttp
-from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.models import StatisticData, StatisticMeanType, StatisticMetaData
-from homeassistant.components.recorder.statistics import async_import_statistics, get_last_statistics
+from homeassistant.components.recorder.statistics import async_add_external_statistics, get_last_statistics
 from homeassistant.const import UnitOfEnergy
 from homeassistant.util import dt as dt_util
 from .api import NectrApiClient
@@ -75,22 +75,9 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
         now = dt_util.now(tz)
         yesterday = (now - timedelta(days=1)).date()
 
-        registry = er.async_get(self.hass)
-
         for metric_key, usage_key in METRICS.items():
-            unique_id = f"nectr_{account_number}_{metric_key}"
-            statistic_id = registry.async_get_entity_id("sensor", DOMAIN, unique_id)
-            if statistic_id is None:
-                continue
-
-            metadata = StatisticMetaData(
-                mean_type=StatisticMeanType.NONE,
-                has_sum=True,
-                name=f"Nectr {account_number} {metric_key.replace('_', ' ').title()}",
-                source="recorder",
-                statistic_id=statistic_id,
-                unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR
-            )
+            statistic_id = external_statistic_id(account_number, metric_key)
+            metadata = _statistic_metadata(account_number, metric_key)
 
             last_stats = await get_instance(self.hass).async_add_executor_job(
                 get_last_statistics, self.hass, 1, statistic_id, True, {"sum"}
@@ -131,7 +118,7 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
                     ))
 
             if statistics:
-                async_import_statistics(self.hass, metadata, statistics)
+                async_add_external_statistics(self.hass, metadata, statistics)
 
     async def async_has_existing_statistics(self) -> bool:
         """Whether any tracked metric already has statistics, for any account.
@@ -141,13 +128,10 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
         """
         if not self.data:
             return False
-        registry = er.async_get(self.hass)
         instance = get_instance(self.hass)
         for acc_num in self.data:
             for metric_key in METRICS:
-                statistic_id = registry.async_get_entity_id("sensor", DOMAIN, f"nectr_{acc_num}_{metric_key}")
-                if statistic_id is None:
-                    continue
+                statistic_id = external_statistic_id(acc_num, metric_key)
                 last_stats = await instance.async_add_executor_job(
                     get_last_statistics, self.hass, 1, statistic_id, True, {"sum"}
                 )
@@ -195,29 +179,16 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
         yesterday = (dt_util.now(tz) - timedelta(days=1)).date()
         start_day = yesterday - timedelta(days=days - 1)
 
-        registry = er.async_get(self.hass)
-        tracked = {}
-        for metric_key, usage_key in METRICS.items():
-            statistic_id = registry.async_get_entity_id("sensor", DOMAIN, f"nectr_{account_number}_{metric_key}")
-            if statistic_id is None:
-                continue
-            tracked[metric_key] = {
+        tracked = {
+            metric_key: {
                 "usage_key": usage_key,
-                "statistic_id": statistic_id,
-                "metadata": StatisticMetaData(
-                    mean_type=StatisticMeanType.NONE,
-                    has_sum=True,
-                    name=f"Nectr {account_number} {metric_key.replace('_', ' ').title()}",
-                    source="recorder",
-                    statistic_id=statistic_id,
-                    unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR
-                ),
+                "statistic_id": external_statistic_id(account_number, metric_key),
+                "metadata": _statistic_metadata(account_number, metric_key),
                 "running_sum": 0.0,
                 "statistics": [],
             }
-
-        if not tracked:
-            return
+            for metric_key, usage_key in METRICS.items()
+        }
 
         await self._async_clear_statistics([t["statistic_id"] for t in tracked.values()])
 
@@ -231,10 +202,13 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
             )
             day_usage = day_data.get("allUsage", [])
             if not day_usage:
-                _LOGGER.warning(
-                    "Nectr API returned no hourly usage for %s (account %s) during backfill — "
-                    "skipping that day", day.isoformat(), account_number
-                )
+                # Days before supply started are always empty; only a gap after the first day
+                # with data is worth a warning, or a year-long backfill logs hundreds of them.
+                if any(metric["statistics"] for metric in tracked.values()):
+                    _LOGGER.warning(
+                        "Nectr API returned no hourly usage for %s (account %s) during backfill — "
+                        "skipping that day", day.isoformat(), account_number
+                    )
                 continue
 
             sorted_usage = sorted(day_usage, key=lambda x: int(x["period"].split(":")[0]))
@@ -253,7 +227,30 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
 
         for metric in tracked.values():
             if metric["statistics"]:
-                async_import_statistics(self.hass, metric["metadata"], metric["statistics"])
+                async_add_external_statistics(self.hass, metric["metadata"], metric["statistics"])
+
+
+def external_statistic_id(account_number, metric_key):
+    """Statistic id for a metric's hourly history, e.g. `nectr:a_6cffe20e_grid_consumption`.
+
+    External statistics (source `nectr`, not `recorder`) because the recorder compiles its
+    own statistics for any entity with a state_class, and those overwrote the imported hours.
+    HA only accepts lowercase letters, digits and single underscores in the object id.
+    """
+    slug = re.sub(r"[^a-z0-9]+", "_", str(account_number).lower()).strip("_")
+    return f"{DOMAIN}:{slug}_{metric_key}"
+
+
+def _statistic_metadata(account_number, metric_key):
+    return StatisticMetaData(
+        mean_type=StatisticMeanType.NONE,
+        has_sum=True,
+        name=f"Nectr {metric_key.replace('_', ' ').title()} ({account_number})",
+        source=DOMAIN,
+        statistic_id=external_statistic_id(account_number, metric_key),
+        unit_class="energy",
+        unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+    )
 
 
 def _missing_dates(last_date, until_date, max_days=30):

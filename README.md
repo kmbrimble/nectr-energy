@@ -13,7 +13,7 @@ The integration authenticates against Nectr's mobile GraphQL API
 (`mobile.nectr.com.au/graphql`) with your account email and password, then polls it on a
 configurable interval for each active account on your login: usage, billing, Power Perks, and
 tariff data. Each poll also catches up any missing hourly grid/export/controlled-load usage into
-Home Assistant's recorder statistics, so the Energy dashboard has continuous history rather than
+Home Assistant's long-term statistics, so the Energy dashboard has continuous history rather than
 a gap before setup.
 
 On first install, once the sensor entities exist, the integration automatically backfills up to a
@@ -37,25 +37,15 @@ sum, and a freshly computed earlier window starting its own sum from 0 would cre
 discontinuity against whatever sum the existing data already reached. The Energy dashboard reads
 deltas, so this reset doesn't affect what it displays.
 
-**Recent history not showing up.** Home Assistant's History page prefers an entity's raw recorded
-states over its long-term statistics whenever both exist for the same period, and it keeps raw
-states for roughly the last 10 days by default. That means recently imported hourly statistics
-can be invisible in History even though they imported correctly — it's showing you the sensor's
-regular state updates instead, which won't have hourly granularity. To check statistics
-directly, use the Energy dashboard (it always reads statistics, never raw states) or the
-`recorder.get_statistics` action. If you want History itself to show the hourly data for that
-window, clear the raw state history for the affected sensors — it doesn't touch the imported
-statistics — with **Recorder: Purge entities** (`recorder.purge_entities`):
-
-```yaml
-action: recorder.purge_entities
-data:
-  entity_id:
-    - sensor.your_grid_consumption_entity
-    - sensor.your_export_consumption_entity
-    - sensor.your_controlled_load_entity
-  keep_days: 0
-```
+**Where the history lives.** Hourly history is stored as *external statistics*, one per metric
+and account, with ids like `nectr:<account>_grid_consumption`, `nectr:<account>_export_consumption`
+and `nectr:<account>_controlled_load`. Pick those in the Energy dashboard, or in a
+statistics-graph card. They are not attached to the sensor entities: the sensors show the latest
+day's totals and have no state class, because a state class makes the recorder compile its own
+statistics for the entity, and before 1.2.10 those overwrote the imported hours and corrupted the
+history. Upgrading from 1.2.9 or earlier imports the history afresh under the new ids, and Home
+Assistant raises a repair for each old `sensor.*` statistic; its **Delete** option removes the
+corrupted copy.
 
 ## Pre-requisites
 
