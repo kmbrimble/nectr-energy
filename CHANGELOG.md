@@ -2,6 +2,32 @@
 
 ## [Unreleased]
 
+### 2026-09-16 — Real Home Assistant tests
+
+Test infrastructure only, no integration behaviour changes. Adds a `pytest` suite that runs
+against the real `homeassistant` package (via `pytest-homeassistant-custom-component`) instead
+of the hand-written stubs in `tests/test_*.py`, so a regression like #47 (`async_import_statistics`
+→ `async_add_external_statistics`, `unit_class` added, `state_class` removed) fails locally
+instead of only on a live HACS install.
+
+- `.venv/` (Python 3.14, uv-managed), gitignored.
+- `requirements_test.txt` pinning `pytest-homeassistant-custom-component==0.13.365`, which
+  pulls in homeassistant 2026.9.2 (live is 2026.9.1).
+- `tests/ha/` is a separate pytest root (own `pytest.ini`) from the six stub-based
+  `tests/test_*.py` scripts, so `pytest tests/ha` can never collect them and mix
+  `sys.modules` stubs into the real-HA process. `tests/ha/conftest.py` makes the repo
+  importable as `custom_components.nectr` via a symlink into the plugin's own default test
+  config dir (inside `.venv`), using `enable_custom_integrations`.
+- New real-HA tests: external statistics (the #47 regression guard — RED-proofed by
+  temporarily reverting `coordinator.py::_statistic_metadata` to the pre-#47 shape, observing
+  the new test fail, then reverting), config flow user-step/duplicate-abort/no-accounts, and
+  setup/unload including the HTTP 400 schema-drift path.
+- Existing six stub-based tests in `tests/` are kept as-is and untouched.
+- Found and reported (not fixed, out of this change's scope): `config_flow.py`'s
+  `async_step_user` catches `AbortFlow` inside its bare `except Exception:`, so a duplicate
+  account submission shows a generic auth error instead of aborting. Guarded by an
+  `xfail(strict=True)` test; see CLAUDE.md's Testing section.
+
 ## 1.2.10
 
 - Fixed the integration being stuck in setup retry with `400, message='Bad Request'`. Nectr
