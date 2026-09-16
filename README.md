@@ -44,8 +44,9 @@ statistics-graph card. They are not attached to the sensor entities: the sensors
 day's totals and have no state class, because a state class makes the recorder compile its own
 statistics for the entity, and before 1.2.10 those overwrote the imported hours and corrupted the
 history. Upgrading from 1.2.9 or earlier imports the history afresh under the new ids, and Home
-Assistant raises a repair for each old `sensor.*` statistic; its **Delete** option removes the
-corrupted copy.
+Assistant raises a "no longer has a state class" repair for each old `sensor.*` statistic. Clear
+it from **Developer Tools → Statistics**, where that statistic's **Fix issue** button offers to
+delete the corrupted copy.
 
 ## Pre-requisites
 
