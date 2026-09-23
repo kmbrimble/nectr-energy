@@ -2,6 +2,7 @@ import re
 from datetime import date
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.const import UnitOfEnergy, CURRENCY_DOLLAR, PERCENTAGE
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     DOMAIN,
     DEFAULT_VISIBLE_SENSORS,
@@ -61,11 +62,13 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     async_add_entities(entities)
 
-class NectrBaseSensor(SensorEntity):
+# CoordinatorEntity is what registers a listener on the coordinator. Without one,
+# DataUpdateCoordinator never arms its refresh timer and only ever runs at setup/reload.
+class NectrBaseSensor(CoordinatorEntity, SensorEntity):
     _attr_has_entity_name = True
 
     def __init__(self, coordinator, account_number, name, unique_key):
-        self.coordinator = coordinator
+        super().__init__(coordinator)
         self.account_number = account_number
         self.unique_key = unique_key
         self._attr_name = name

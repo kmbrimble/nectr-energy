@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+### 2026-09-24 — Coordinator never refreshed after setup
+
+The 24h refresh timer was never armed. `DataUpdateCoordinator` only schedules its next refresh
+while it has at least one listener, and the sensors were plain `SensorEntity` subclasses, so it
+had none: the coordinator ran once at setup/reload and never again on its own. Statistics went
+stale until the next HA restart or config-entry reload (seen on 20 and 24 Sep 2026 as blank days
+in the Kiosk energy chart; frequent restarts had been hiding it).
+
+- `sensor.py`: `NectrBaseSensor` now subclasses `CoordinatorEntity`, so each entity registers a
+  listener and HA schedules the periodic refresh. One side effect of the idiom: entities now go
+  `unavailable` while the last refresh failed, instead of holding their previous value.
+- `coordinator.py`: INFO log line at the start and end of every refresh, and at the "API returned
+  no hourly usage for <day>, skipping" path (previously silent). Only INFO-and-above reaches Loki,
+  so a future stall now leaves evidence.
+- `tests/ha/test_periodic_refresh.py`: sets up the entry, advances past the 24h interval, and
+  asserts a second refresh fires (fails without the `CoordinatorEntity` change). Also guards the new
+  log lines.
+- `tests/test_generic_sensor_device_class.py`: stub for the new `update_coordinator` import.
+
 ### 2026-09-16 — Real Home Assistant tests
 
 Test infrastructure only, no integration behaviour changes. Adds a `pytest` suite that runs
