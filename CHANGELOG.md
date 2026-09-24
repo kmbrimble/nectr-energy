@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## 1.2.11
+
 ### 2026-09-24 — Coordinator never refreshed after setup
 
 The 24h refresh timer was never armed. `DataUpdateCoordinator` only schedules its next refresh
