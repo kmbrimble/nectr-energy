@@ -42,6 +42,7 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=timedelta(hours=interval_hours))
 
     async def _async_update_data(self):
+        _LOGGER.info("Refreshing Nectr data (interval %s)", self.update_interval)
         try:
             async with aiohttp.ClientSession() as session:
                 await self.api.authenticate(session)
@@ -66,6 +67,7 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
                     }
 
                     await self._inject_historical_data(session, acc_num, account.get("state"))
+                _LOGGER.info("Nectr refresh finished for %d account(s)", len(data))
                 return data
         except (aiohttp.ClientError, ValueError) as err:
             raise UpdateFailed(f"Error communicating with Nectr API: {err}") from err
@@ -101,6 +103,12 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
                 )
                 day_usage = day_data.get("allUsage", [])
                 if not day_usage:
+                    # Nectr publishes a day's usage late, so this is often just "not yet" — it is
+                    # retried on the next refresh, but only visible if it's logged.
+                    _LOGGER.info(
+                        "Nectr API returned no hourly usage for %s (account %s, %s) — skipping that day",
+                        day.isoformat(), account_number, metric_key,
+                    )
                     continue
 
                 sorted_usage = sorted(day_usage, key=lambda x: int(x["period"].split(":")[0]))

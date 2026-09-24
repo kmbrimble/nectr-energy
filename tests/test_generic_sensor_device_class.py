@@ -37,6 +37,17 @@ ha_const.CURRENCY_DOLLAR = "$"
 ha_const.PERCENTAGE = "%"
 sys.modules["homeassistant.const"] = ha_const
 
+
+class _FakeCoordinatorEntity:
+    def __init__(self, coordinator):
+        self.coordinator = coordinator
+
+
+ha_update_coordinator = type(sys)("homeassistant.helpers.update_coordinator")
+ha_update_coordinator.CoordinatorEntity = _FakeCoordinatorEntity
+sys.modules["homeassistant.helpers"] = type(sys)("homeassistant.helpers")
+sys.modules["homeassistant.helpers.update_coordinator"] = ha_update_coordinator
+
 import importlib.util
 
 ROOT = Path(__file__).resolve().parent.parent

@@ -2,6 +2,53 @@
 
 ## [Unreleased]
 
+## 1.2.11
+
+### 2026-09-24 — Coordinator never refreshed after setup
+
+The 24h refresh timer was never armed. `DataUpdateCoordinator` only schedules its next refresh
+while it has at least one listener, and the sensors were plain `SensorEntity` subclasses, so it
+had none: the coordinator ran once at setup/reload and never again on its own. Statistics went
+stale until the next HA restart or config-entry reload (seen on 20 and 24 Sep 2026 as blank days
+in the Kiosk energy chart; frequent restarts had been hiding it).
+
+- `sensor.py`: `NectrBaseSensor` now subclasses `CoordinatorEntity`, so each entity registers a
+  listener and HA schedules the periodic refresh. One side effect of the idiom: entities now go
+  `unavailable` while the last refresh failed, instead of holding their previous value.
+- `coordinator.py`: INFO log line at the start and end of every refresh, and at the "API returned
+  no hourly usage for <day>, skipping" path (previously silent). Only INFO-and-above reaches Loki,
+  so a future stall now leaves evidence.
+- `tests/ha/test_periodic_refresh.py`: sets up the entry, advances past the 24h interval, and
+  asserts a second refresh fires (fails without the `CoordinatorEntity` change). Also guards the new
+  log lines.
+- `tests/test_generic_sensor_device_class.py`: stub for the new `update_coordinator` import.
+
+### 2026-09-16 — Real Home Assistant tests
+
+Test infrastructure only, no integration behaviour changes. Adds a `pytest` suite that runs
+against the real `homeassistant` package (via `pytest-homeassistant-custom-component`) instead
+of the hand-written stubs in `tests/test_*.py`, so a regression like #47 (`async_import_statistics`
+→ `async_add_external_statistics`, `unit_class` added, `state_class` removed) fails locally
+instead of only on a live HACS install.
+
+- `.venv/` (Python 3.14, uv-managed), gitignored.
+- `requirements_test.txt` pinning `pytest-homeassistant-custom-component==0.13.365`, which
+  pulls in homeassistant 2026.9.2 (live is 2026.9.1).
+- `tests/ha/` is a separate pytest root (own `pytest.ini`) from the six stub-based
+  `tests/test_*.py` scripts, so `pytest tests/ha` can never collect them and mix
+  `sys.modules` stubs into the real-HA process. `tests/ha/conftest.py` makes the repo
+  importable as `custom_components.nectr` via a symlink into the plugin's own default test
+  config dir (inside `.venv`), using `enable_custom_integrations`.
+- New real-HA tests: external statistics (the #47 regression guard — RED-proofed by
+  temporarily reverting `coordinator.py::_statistic_metadata` to the pre-#47 shape, observing
+  the new test fail, then reverting), config flow user-step/duplicate-abort/no-accounts, and
+  setup/unload including the HTTP 400 schema-drift path.
+- Existing six stub-based tests in `tests/` are kept as-is and untouched.
+- Found and reported (not fixed, out of this change's scope): `config_flow.py`'s
+  `async_step_user` catches `AbortFlow` inside its bare `except Exception:`, so a duplicate
+  account submission shows a generic auth error instead of aborting. Guarded by an
+  `xfail(strict=True)` test; see CLAUDE.md's Testing section.
+
 ## 1.2.10
 
 - Fixed the integration being stuck in setup retry with `400, message='Bad Request'`. Nectr
