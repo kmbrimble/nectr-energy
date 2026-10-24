@@ -52,6 +52,7 @@ def _load_coordinator():
     _stub("aiohttp", ClientError=Exception, ClientSession=object)
     _stub("homeassistant.helpers.update_coordinator",
           DataUpdateCoordinator=_Coordinator, UpdateFailed=Exception)
+    _stub("homeassistant.helpers.event", async_track_time_change=None)
     _stub("homeassistant.components.recorder", get_instance=lambda hass: _Instance())
     sys.modules["homeassistant.components.recorder.models"].__dict__.update(
         StatisticData=dict, StatisticMeanType=_Enum, StatisticMetaData=dict)

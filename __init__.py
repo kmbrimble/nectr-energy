@@ -10,6 +10,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+    entry.async_on_unload(coordinator.async_start_history_retry())
 
     if not await coordinator.async_has_existing_statistics():
         hass.async_create_task(coordinator.async_backfill_history())
