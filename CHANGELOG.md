@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## 1.2.12
+
+### 2026-10-24 — Retry yesterday's usage hourly until Nectr publishes it
+
+Nectr publishes a day's usage late, at no fixed time, and the coordinator refreshed once every 24h
+from setup. A restart at 05:14 AEST moved that refresh ahead of the publish, so 23 Oct was skipped
+("API returned no hourly usage … skipping that day") and the Kiosk energy chart stayed a day short
+until the next refresh, roughly 24h later.
+
+- `coordinator.py`: new `async_start_history_retry()` fires at the top of every hour (HA local time),
+  so the checks begin at midnight, when a new "yesterday" starts. Each tick looks at the stored
+  statistics (local recorder query, no API call); only if yesterday is missing for any metric does it
+  authenticate and import. Once yesterday is stored it makes no API calls until the next midnight.
+- `coordinator.py`: a lock now serialises every statistics write (refresh, retry, backfill), since
+  each derives its running sum from the last stored row.
+- `__init__.py`: starts the retry at setup and cancels it on unload via `entry.async_on_unload`.
+- `tests/ha/test_hourly_history_retry.py`: retries every hour while unpublished; imports yesterday
+  once published; makes no API calls afterwards. Both tests fail without the change.
+- `tests/ha/test_periodic_refresh.py`: counts refresh log lines instead of authenticate calls, since
+  the hourly retry also authenticates. `tests/test_external_statistics.py`: stub for
+  `homeassistant.helpers.event`.
+
 ## 1.2.11
 
 ### 2026-09-24 — Coordinator never refreshed after setup

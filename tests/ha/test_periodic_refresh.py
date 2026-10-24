@@ -24,7 +24,7 @@ async def test_coordinator_refreshes_again_after_interval(recorder_mock, hass, e
     entry.add_to_hass(hass)
 
     with ExitStack() as stack:
-        authenticate = stack.enter_context(patch(f"{API}.authenticate", new=AsyncMock(return_value="token")))
+        stack.enter_context(patch(f"{API}.authenticate", new=AsyncMock(return_value="token")))
         stack.enter_context(
             patch(f"{API}.get_accounts", new=AsyncMock(return_value=[{"number": "A-1", "state": "QUEENSLAND"}]))
         )
@@ -33,12 +33,14 @@ async def test_coordinator_refreshes_again_after_interval(recorder_mock, hass, e
 
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
-        after_setup = authenticate.await_count
+        # Count refresh log lines, not API calls: the hourly history retry authenticates too.
+        refreshes_after_setup = caplog.text.count("Refreshing Nectr data")
 
         async_fire_time_changed(hass, dt_util.utcnow() + timedelta(hours=24, minutes=1))
         await hass.async_block_till_done()
 
-        assert authenticate.await_count == after_setup + 1, "coordinator never refreshed after its 24h interval"
+        refreshes = caplog.text.count("Refreshing Nectr data")
+        assert refreshes == refreshes_after_setup + 1, "coordinator never refreshed after its 24h interval"
 
     # Loki only sees INFO and above, so these are how a future stall (or a not-yet-published day) shows up.
     assert "Refreshing Nectr data" in caplog.text

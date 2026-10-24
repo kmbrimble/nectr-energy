@@ -9,6 +9,7 @@ from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.models import StatisticData, StatisticMeanType, StatisticMetaData
 from homeassistant.components.recorder.statistics import async_add_external_statistics, get_last_statistics
 from homeassistant.const import UnitOfEnergy
+from homeassistant.helpers.event import async_track_time_change
 from homeassistant.util import dt as dt_util
 from .api import NectrApiClient
 from .const import DOMAIN, CONF_INTERVAL, DEFAULT_INTERVAL, BACKFILL_INITIAL_DAYS
@@ -40,6 +41,9 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
         self.api = NectrApiClient(entry.data["email"], entry.data["password"])
         interval_hours = entry.options.get(CONF_INTERVAL, entry.data.get(CONF_INTERVAL, DEFAULT_INTERVAL))
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=timedelta(hours=interval_hours))
+        self._account_states = {}
+        # Serialises statistics writes: each one derives its running sum from the last stored row.
+        self._history_lock = asyncio.Lock()
 
     async def _async_update_data(self):
         _LOGGER.info("Refreshing Nectr data (interval %s)", self.update_interval)
@@ -66,11 +70,52 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
                         "product_info": product_info
                     }
 
-                    await self._inject_historical_data(session, acc_num, account.get("state"))
+                    self._account_states[acc_num] = account.get("state")
+                    async with self._history_lock:
+                        await self._inject_historical_data(session, acc_num, account.get("state"))
                 _LOGGER.info("Nectr refresh finished for %d account(s)", len(data))
                 return data
         except (aiohttp.ClientError, ValueError) as err:
             raise UpdateFailed(f"Error communicating with Nectr API: {err}") from err
+
+    def async_start_history_retry(self):
+        """Retry yesterday's history at the top of every hour until Nectr has published it.
+
+        Nectr publishes a day's usage late, at no fixed time, so a once-a-day refresh lands
+        before it whenever a restart moves the refresh timer into the early morning. The retry
+        costs nothing once yesterday is stored: it is a local recorder lookup, no API calls.
+        Returns the unsubscribe callback.
+        """
+        return async_track_time_change(self.hass, self._async_retry_missing_history, minute=0, second=0)
+
+    async def _async_retry_missing_history(self, _now):
+        if await self._async_has_yesterdays_history():
+            return
+        _LOGGER.info("Nectr usage for yesterday is not stored yet, retrying")
+        try:
+            async with self._history_lock, aiohttp.ClientSession() as session:
+                await self.api.authenticate(session)
+                for account_number, account_state in self._account_states.items():
+                    await self._inject_historical_data(session, account_number, account_state)
+        except (aiohttp.ClientError, ValueError) as err:
+            _LOGGER.warning("Hourly retry of Nectr history failed: %s", err)
+
+    async def _async_has_yesterdays_history(self) -> bool:
+        instance = get_instance(self.hass)
+        for account_number, account_state in self._account_states.items():
+            tz = ZoneInfo(STATE_TIMEZONES.get((account_state or "").upper(), "Australia/Brisbane"))
+            yesterday = (dt_util.now(tz) - timedelta(days=1)).date()
+            for metric_key in METRICS:
+                statistic_id = external_statistic_id(account_number, metric_key)
+                last_stats = await instance.async_add_executor_job(
+                    get_last_statistics, self.hass, 1, statistic_id, True, {"sum"}
+                )
+                if statistic_id not in last_stats:
+                    return False
+                last_date = dt_util.utc_from_timestamp(last_stats[statistic_id][0]["start"]).astimezone(tz).date()
+                if last_date < yesterday:
+                    return False
+        return True
 
     async def _inject_historical_data(self, session, account_number, account_state):
         tz = ZoneInfo(STATE_TIMEZONES.get((account_state or "").upper(), "Australia/Brisbane"))
@@ -157,7 +202,7 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
         earlier window starting its own sum from 0 would create a discontinuity against
         whatever sum the existing data already reached.
         """
-        async with aiohttp.ClientSession() as session:
+        async with self._history_lock, aiohttp.ClientSession() as session:
             await self.api.authenticate(session)
             accounts = await self.api.get_accounts(session)
             for account in accounts:
