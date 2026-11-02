@@ -78,8 +78,9 @@ if [ "$VERBOSE" = "1" ]; then
   STASH_COUNT=$(git stash list 2>/dev/null | wc -l | tr -d ' ')
   [ "$STASH_COUNT" -gt 0 ] 2>/dev/null && CONTEXT="$CONTEXT | $STASH_COUNT stash(es)"
 
-  if command -v gh >/dev/null 2>&1; then
-    PR_INFO=$(gh pr view --json number,title,state --jq '"PR #\(.number): \(.title) (\(.state))"' 2>/dev/null)
+  # The repo lives on Gitea (GitHub is a read-only mirror), so ask gt, not gh, about the current branch's PR.
+  if command -v gt >/dev/null 2>&1; then
+    PR_INFO=$(gt pr view "$(git branch --show-current 2>/dev/null)" --json number,title,state --jq '"PR #\(.number): \(.title) (\(.state))"' --no-input 2>/dev/null)
     [ -n "$PR_INFO" ] && CONTEXT="$CONTEXT | $PR_INFO"
   fi
 fi

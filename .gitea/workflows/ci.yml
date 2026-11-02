@@ -1,0 +1,44 @@
+name: CI
+
+# Gitea is the primary forge (GitHub is a read-only push mirror that only publishes releases). The two jobs below are the
+# required status checks on master ("CI / stub-tests (pull_request)" and "CI / ha-tests (pull_request)"). They are separate jobs
+# (and not a matrix) so the check names are fixed. The two suites must not be mixed in one pytest run (see CLAUDE.md "Testing").
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  stub-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      # Plain scripts that hand-stub Home Assistant: no install needed.
+      - name: Stub tests
+        run: |
+          set -euo pipefail
+          for f in tests/test_*.py; do
+            echo "== $f"
+            python3 "$f"
+          done
+
+  ha-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
+      # The real-HA suite needs Python 3.14 (homeassistant 2026.9): uv fetches it in a few seconds.
+      - name: Python 3.14 venv with pytest-homeassistant-custom-component
+        run: |
+          set -euo pipefail
+          pip3 install -q --break-system-packages uv
+          uv venv --python 3.14 .venv
+          uv pip install --python .venv/bin/python -r requirements_test.txt
+          # tests/ha/test_hourly_history_retry.py fakes the clock against the real one and is timing sensitive: it passed 6/6 full-suite
+          # runs on an idle machine but failed intermittently when the runner was running other jobs. Two reruns absorb that.
+          uv pip install --python .venv/bin/python pytest-rerunfailures
+
+      # The explicit tests/ha path matters: it is what makes pytest pick up tests/ha/pytest.ini as its rootdir.
+      - name: Real Home Assistant suite
+        run: .venv/bin/pytest tests/ha --reruns 2 --reruns-delay 1

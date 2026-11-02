@@ -1,5 +1,7 @@
 # Nectr Energy
 
+> Development happens on a private forge; this repository is a read-only mirror. Releases are published here.
+
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/v/release/kmbrimble/nectr-energy)](https://github.com/kmbrimble/nectr-energy/releases)
 

@@ -16,6 +16,22 @@ component directory. Code style lives in `.claude/rules/code-quality.md`.
 - Don't hardcode credentials — email/password come from the config flow entry, never
   from source.
 
+## Forge and releases (changed 2 Nov 2026)
+
+**Gitea is primary; GitHub is a read-only push mirror and must never be pushed to directly** (the mirror force-syncs and prunes refs;
+Gitea syncs on every push and every 10 minutes). Work on `https://git.kiztigs.com/kmbrimble/nectr-energy` (`origin`, gt credential helper);
+use `gt`, not `gh`, for issues and PRs. The default branch is `master`, protected: PR + the green `CI / stub-tests (pull_request)` and
+`CI / ha-tests (pull_request)` checks (`.gitea/workflows/ci.yml`); butler-bot merges its own green PRs. GitHub has Issues, Wiki, Projects, Discussions and PRs
+switched off. **This integration is installed in Home Assistant through HACS from the GitHub repo**, which reads GitHub Releases, so releases must keep appearing on GitHub.
+**Release = tag on Gitea.** Bump `manifest.json` `version` and add the `## X.Y.Z` section to `CHANGELOG.md` in a PR, merge it, then
+`git tag vX.Y.Z <merge-commit> && git push origin vX.Y.Z`. The mirror carries the tag to GitHub and `.github/workflows/release.yml` there creates the
+GitHub Release (notes = that CHANGELOG section); HACS picks it up. Nothing writes back to Gitea. A `vX.Y.Z-rc.N` tag is published as a GitHub *pre-release*
+(HACS ignores those unless "show beta" is on) and is how the pipeline is tested; the workflow can also be dispatched by hand on GitHub as a dry run.
+See the `forge-release` skill. `hacs.json` has no `zip_release`; if that is ever set the workflow refuses to run until it builds the zip.
+PRs that predate this layout (their branches have no `.gitea/workflows`) get no CI until rebased on `master`.
+**Known flake:** `tests/ha/test_hourly_history_retry.py` is timing sensitive (it fires fake time against the real clock): green 6/6 on an idle machine, intermittently red when the
+runner is busy. The CI job runs the real-HA suite with `--reruns 2` for that reason; a red `ha-tests` that goes green on re-run is this flake, not a regression. Fixing the test's timing is open.
+
 ## Testing
 
 Two separate suites — do not mix them in one pytest invocation:

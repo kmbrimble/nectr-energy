@@ -1,0 +1,84 @@
+name: Release
+
+# This repository is a READ-ONLY MIRROR of the primary repo on a private forge (Gitea). Never push, tag or edit anything here
+# directly: the mirror force-syncs from the primary and prunes refs that exist only on GitHub.
+#
+# A release is a v* tag created on the primary and carried here by the mirror. HACS reads GitHub Releases, so this workflow creates
+# the GitHub Release for the mirrored tag (notes taken from CHANGELOG.md). It does NOT commit, push or tag anything.
+# hacs.json has no zip_release, so there is no asset to build; the workflow refuses to run if that ever changes.
+#
+#   v0.2.1        a normal release. manifest.json "version" must equal 0.2.1.
+#   v0.2.1-rc.1   a pre-release (any "-suffix"): published as a GitHub pre-release, which HACS ignores unless "show beta" is on.
+#                 Not required to match manifest.json; used to prove this pipeline without publishing a real version.
+#
+# workflow_dispatch is a dry run: it validates manifest.json against the changelog, prints the release notes it would use,
+# and publishes nothing.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' }}
+      MANIFEST: manifest.json
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with:
+          fetch-depth: 0
+
+      - name: Work out the version and check it
+        run: |
+          set -euo pipefail
+          if jq -e '.zip_release // false' hacs.json >/dev/null; then
+            echo "::error::hacs.json sets zip_release, but this workflow builds no zip asset"; exit 1
+          fi
+          MV=$(jq -r .version "$MANIFEST")
+          if [ "$DRY_RUN" = "true" ]; then TAG="v$MV"; else TAG="$GITHUB_REF_NAME"; fi
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "::error::tag '$TAG' is not vMAJOR.MINOR.PATCH[-suffix]"; exit 1; }
+          VER="${TAG#v}"; BASE="${VER%%-*}"; PRE=false
+          [ "$VER" != "$BASE" ] && PRE=true
+          if [ "$PRE" = false ] && [ "$VER" != "$MV" ]; then
+            echo "::error::tag $TAG does not match $MANIFEST version $MV"; exit 1
+          fi
+          { echo "TAG=$TAG"; echo "VER=$VER"; echo "BASE=$BASE"; echo "PRE=$PRE"; } >> "$GITHUB_ENV"
+
+      - name: Release notes from CHANGELOG.md
+        run: |
+          set -euo pipefail
+          awk -v want="$BASE" '
+            $0 ~ "^## " && !inside { split($0, a, " "); if (a[2] == want) { inside = 1; next } }
+            inside && /^## / { exit }
+            inside { print }
+          ' CHANGELOG.md | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' > /tmp/notes.md
+          if [ ! -s /tmp/notes.md ]; then
+            if [ "$PRE" = true ]; then
+              echo "Pre-release of $BASE for testing the release pipeline. Not for installation." > /tmp/notes.md
+            else
+              echo "::error::CHANGELOG.md has no '## $BASE' section"; exit 1
+            fi
+          fi
+          echo "---- notes for $TAG (pre-release: $PRE) ----"; cat /tmp/notes.md
+
+      - name: Publish the GitHub Release
+        if: env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists - nothing to do."; exit 0
+          fi
+          FLAGS=()
+          [ "$PRE" = true ] && FLAGS+=(--prerelease)
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file /tmp/notes.md "${FLAGS[@]}"
