@@ -58,7 +58,7 @@ def _load_coordinator():
         StatisticData=dict, StatisticMeanType=_Enum, StatisticMetaData=dict)
     _stub("homeassistant.components.recorder.statistics",
           async_add_external_statistics=lambda hass, meta, stats: imported.append((meta, stats)),
-          get_last_statistics=None)
+          get_last_statistics=None, statistics_during_period=None)
     _stub("homeassistant.const", UnitOfEnergy=types.SimpleNamespace(KILO_WATT_HOUR="kWh"))
     _stub("homeassistant.util.dt",
           now=lambda tz: datetime(2026, 9, 16, 12, tzinfo=tz),

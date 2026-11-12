@@ -7,7 +7,11 @@ import aiohttp
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.models import StatisticData, StatisticMeanType, StatisticMetaData
-from homeassistant.components.recorder.statistics import async_add_external_statistics, get_last_statistics
+from homeassistant.components.recorder.statistics import (
+    async_add_external_statistics,
+    get_last_statistics,
+    statistics_during_period,
+)
 from homeassistant.const import UnitOfEnergy
 from homeassistant.helpers.event import async_track_time_change
 from homeassistant.util import dt as dt_util
@@ -21,6 +25,12 @@ METRICS = {
 }
 
 CLEAR_STATISTICS_TIMEOUT = 10
+
+# How far back to look for a day that was skipped while later days were stored.
+GAP_LOOKBACK_DAYS = 30
+# Yesterday is retried every hour; an older gap only when the hour is a multiple of this, because a
+# day Nectr never publishes would otherwise cost an API call every hour for the whole lookback.
+OLD_GAP_RETRY_HOURS = 6
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -88,10 +98,13 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
         """
         return async_track_time_change(self.hass, self._async_retry_missing_history, minute=0, second=0)
 
-    async def _async_retry_missing_history(self, _now):
+    async def _async_retry_missing_history(self, now):
         if await self._async_has_yesterdays_history():
-            return
-        _LOGGER.info("Nectr usage for yesterday is not stored yet, retrying")
+            if dt_util.as_local(now).hour % OLD_GAP_RETRY_HOURS or not await self._async_has_interior_gaps():
+                return
+            _LOGGER.info("Nectr usage is missing for days before yesterday, retrying")
+        else:
+            _LOGGER.info("Nectr usage for yesterday is not stored yet, retrying")
         try:
             async with self._history_lock, aiohttp.ClientSession() as session:
                 await self.api.authenticate(session)
@@ -117,10 +130,91 @@ class NectrDataUpdateCoordinator(DataUpdateCoordinator):
                     return False
         return True
 
+    async def _async_has_interior_gaps(self) -> bool:
+        for account_number, account_state in self._account_states.items():
+            tz = ZoneInfo(STATE_TIMEZONES.get((account_state or "").upper(), "Australia/Brisbane"))
+            yesterday = (dt_util.now(tz) - timedelta(days=1)).date()
+            for metric_key in METRICS:
+                rows = await self._async_stored_hours(external_statistic_id(account_number, metric_key), tz, yesterday)
+                if _interior_gaps(rows, tz):
+                    return True
+        return False
+
+    async def _async_stored_hours(self, statistic_id, tz, yesterday):
+        """Stored hourly rows (start, state, sum) for the lookback window, oldest first."""
+        start = datetime.combine(yesterday - timedelta(days=GAP_LOOKBACK_DAYS - 1), datetime.min.time(), tzinfo=tz)
+        rows = await get_instance(self.hass).async_add_executor_job(
+            statistics_during_period, self.hass, start, None, {statistic_id}, "hour", None, {"state", "sum"}
+        )
+        return rows.get(statistic_id, [])
+
+    async def _fill_interior_gaps(self, session, account_number, tz, yesterday) -> bool:
+        """Fetch days that were skipped while later days were stored, and re-base the later sums.
+
+        `_missing_dates` only looks forward from the last stored day, so a day Nectr published
+        late (6 Nov 2026, found on 8 Nov) was never asked for again once a later day was stored.
+        Statistics hold a cumulative `sum`, so inserting a day means every later row's sum moves
+        by that day's total; the later rows are rewritten here, from their stored hourly values,
+        in the same import as the new day. Returns whether anything was written.
+        """
+        fetched = {}
+        wrote = False
+        for metric_key, usage_key in METRICS.items():
+            statistic_id = external_statistic_id(account_number, metric_key)
+            rows = await self._async_stored_hours(statistic_id, tz, yesterday)
+            gaps = _interior_gaps(rows, tz)
+            if not gaps:
+                continue
+
+            new_hours = []
+            for day in gaps:
+                if day not in fetched:
+                    day_data = await self.api.get_usage(
+                        session,
+                        account_number,
+                        day.strftime("%d/%m/%Y"),
+                        (day + timedelta(days=1)).strftime("%d/%m/%Y"),
+                    )
+                    fetched[day] = day_data.get("allUsage", [])
+                if not fetched[day]:
+                    _LOGGER.info(
+                        "Nectr API still has no hourly usage for %s (account %s, %s) — leaving that day empty",
+                        day.isoformat(), account_number, metric_key,
+                    )
+                    continue
+                for item in fetched[day]:
+                    hour = int(item["period"].split(":")[0])
+                    start_time = datetime.combine(day, datetime.min.time(), tzinfo=tz).replace(hour=hour)
+                    new_hours.append((start_time, float(item.get(usage_key, 0) or 0)))
+            if not new_hours:
+                continue
+
+            earliest = min(start for start, _ in new_hours)
+            stored = [(dt_util.utc_from_timestamp(row["start"]), row) for row in rows]
+            base_sum = next((row["sum"] or 0.0 for start, row in reversed(stored) if start < earliest), 0.0)
+            later_hours = [(start, float(row["state"] or 0.0)) for start, row in stored if start >= earliest]
+
+            running_sum = base_sum
+            statistics = []
+            for start, value in sorted(new_hours + later_hours, key=lambda hour: hour[0]):
+                running_sum += value
+                statistics.append(StatisticData(start=start, state=value, sum=running_sum))
+            async_add_external_statistics(self.hass, _statistic_metadata(account_number, metric_key), statistics)
+            wrote = True
+            _LOGGER.info(
+                "Filled %d missing hour(s) of %s for account %s from %s, re-based %d later hour(s)",
+                len(new_hours), metric_key, account_number, earliest.date().isoformat(), len(later_hours),
+            )
+        return wrote
+
     async def _inject_historical_data(self, session, account_number, account_state):
         tz = ZoneInfo(STATE_TIMEZONES.get((account_state or "").upper(), "Australia/Brisbane"))
         now = dt_util.now(tz)
         yesterday = (now - timedelta(days=1)).date()
+
+        if await self._fill_interior_gaps(session, account_number, tz, yesterday):
+            # The import is queued; the last-row lookups below have to see the re-based sums.
+            await get_instance(self.hass).async_block_till_done()
 
         for metric_key, usage_key in METRICS.items():
             statistic_id = external_statistic_id(account_number, metric_key)
@@ -319,6 +413,20 @@ def _missing_dates(last_date, until_date, max_days=30):
         return []
     start = max(last_date + timedelta(days=1), until_date - timedelta(days=max_days - 1))
     return [start + timedelta(days=i) for i in range((until_date - start).days + 1)]
+
+
+def _interior_gaps(rows, tz):
+    """Days with no stored row that lie between two stored days, within the rows given.
+
+    Days before the first stored row (before supply started) and after the last (not published
+    yet) are not gaps; `_missing_dates` handles the trailing ones.
+    """
+    stored = {dt_util.utc_from_timestamp(row["start"]).astimezone(tz).date() for row in rows}
+    if len(stored) < 2:
+        return []
+    first, last = min(stored), max(stored)
+    days = (first + timedelta(days=n) for n in range(1, (last - first).days))
+    return [day for day in days if day not in stored]
 
 
 def _demo():

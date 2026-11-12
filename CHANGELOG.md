@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## 1.2.13
+
+### 2026-11-13 — Fill days that Nectr publishes late, even after later days are stored
+
+Nectr returned nothing for Fri 6 Nov until well after it had published Sat 7 Nov. The coordinator
+only looked forward from the last stored day, so once 7 Nov was stored it never asked for 6 Nov
+again and the Kiosk energy chart kept an empty slot until a manual `nectr.backfill_history`.
+
+- `coordinator.py`: each refresh and hourly retry now also looks for days with no stored row that lie
+  between two stored days, within the last 30 days. It fetches them, and because statistics hold a
+  cumulative `sum`, rewrites every later hourly row from its stored value with the sums moved by the
+  inserted day, in one import. Days Nectr still lacks are left empty and nothing else changes.
+- `coordinator.py`: yesterday is still retried every hour; older gaps are retried every 6 hours
+  (local hours 0, 6, 12, 18), so a day Nectr never publishes costs 4 API calls a day, not 24.
+  Lookups are local recorder queries; the API is only called when a gap exists.
+- `tests/ha/test_gap_fill.py` (new): fills a skipped day and keeps sums cumulative; leaves a day Nectr
+  still lacks empty; older gaps retried every 6 hours; the retry fills the day once published. The
+  three behavioural tests fail without the change. `tests/test_external_statistics.py`: stub for
+  `statistics_during_period`.
+- Not covered: a gap older than 30 days, or a day that has only some of its hours stored.
+
 ## 1.2.12
 
 ### 2026-10-24 — Retry yesterday's usage hourly until Nectr publishes it
