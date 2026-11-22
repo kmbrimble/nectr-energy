@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Docs
+
+- CLAUDE.md slimmed; architecture, test-suite mechanics and release detail moved to the wiki (page `85-software-projects/nectr-energy`).
+
 ## 1.2.13
 
 ### 2026-11-13 — Fill days that Nectr publishes late, even after later days are stored
